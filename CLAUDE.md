@@ -34,8 +34,9 @@ tests/image-smoke/run.sh <image>    # boot-test a built runtime image, as CI doe
 
 The commit hooks run under prek (a Rust pre-commit); `uv run prek install`
 once per clone (`--force` over an old pre-commit hook, or prek keeps it as
-`pre-commit.legacy`, runs it, and every commit fails). prek runs the `pre-commit-hooks` checks (whitespace, EOF,
-YAML/TOML, large files) as its own Rust builtins, not the pinned Python ones.
+`pre-commit.legacy`, runs it, and every commit fails). prek runs the
+`pre-commit-hooks` checks (whitespace, EOF, YAML/TOML, large files) as its own
+Rust builtins, not the pinned Python ones.
 
 Local dev run: `cp config.toml.example config.toml`, `cp .env.example .env` (set
 `BRIDGE_API_KEY`), then `set -a && source .env && set +a && uv run openai-api-bridge`.
