@@ -26,7 +26,7 @@ uv run pytest -m live        # opt-in live tests against real backends (marker o
 uv run pytest tests/test_video_lifecycle.py::test_name   # single test
 uv run ruff check .          # lint
 uv run ruff format .         # format
-uv run mypy src              # type-check (strict mode is on)
+uv run mypy src tests        # type-check (strict mode is on, tests/ included)
 uv run deptry .              # unused/undeclared dependencies (CI gates on it)
 uv run prek run --all-files         # gitleaks (staged) + file hygiene + ruff from uv.lock
 tests/image-smoke/run.sh <image>    # boot-test a built runtime image, as CI does

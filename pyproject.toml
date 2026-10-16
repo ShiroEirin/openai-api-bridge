@@ -163,6 +163,10 @@ strict = true
 warn_unreachable = true
 warn_redundant_casts = true
 plugins = ["pydantic.mypy"]
+# What a bare `mypy` checks; CI names the same two paths. tests/ is held to the
+# same strict bar as src/, so a double that drifts from the type it stands in
+# for fails here rather than passing against an interface the code lost.
+files = ["src", "tests"]
 # tests/test_release_draft.py imports scripts/release_notes.py off sys.path;
 # this is the same lookup, so the import is checked rather than unresolved.
 mypy_path = "scripts"

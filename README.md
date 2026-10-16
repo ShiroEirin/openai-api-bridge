@@ -641,7 +641,7 @@ uv run pytest                # full suite
 uv run pytest --cov          # with branch coverage + the floor CI enforces
 uv run pytest -m live        # opt-in live tests against real backends (not yet wired)
 uv run ruff check .          # lint
-uv run mypy src              # type-check (strict)
+uv run mypy src tests        # type-check (strict)
 
 # Build the runtime image and boot-test it, as CI does
 docker build -t openai-api-bridge:smoke .
@@ -666,7 +666,7 @@ with its own native versions rather than the pinned Python ones.
 
 | Job | What it checks |
 |---|---|
-| Lint + format + type-check | prek (ruff, file hygiene) and `mypy src` |
+| Lint + format + type-check | prek (ruff, file hygiene) and `mypy src tests` |
 | Tests | `pytest --cov`: fails on any warning, and below the branch-coverage floor in `pyproject.toml` |
 | Workflow + Dockerfile lint | actionlint, zizmor, hadolint, and `CHANGELOG.md`'s structure |
 | Dependency audit | `pip-audit` over the production (`--no-dev`) lock |

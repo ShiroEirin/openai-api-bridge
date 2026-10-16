@@ -236,13 +236,15 @@ jobs:
       - name: prek
         run: uv run --frozen prek run --all-files --show-diff-on-failure
 
-      # Strict mode, as configured in pyproject.toml. `!cancelled()` so a lint
-      # nit doesn't hide a type error in the same run. This matters most for
+      # Strict mode, as configured in pyproject.toml, over tests/ as well as
+      # src/: a loosely typed test double can keep passing against an
+      # interface the code no longer has. `!cancelled()` so a lint nit doesn't
+      # hide a type error in the same run. This matters most for
       # Dependabot: pydantic, fastapi and starlette minors routinely change
       # their annotations without changing runtime behaviour tests would see.
       - name: mypy
         if: ${{ !cancelled() }}
-        run: uv run --frozen mypy src
+        run: uv run --frozen mypy src tests
 
       # Declared-but-unused packages, and imports missing from the
       # declarations. Neither shows up anywhere else: an unused package still
