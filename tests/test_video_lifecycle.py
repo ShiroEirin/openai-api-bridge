@@ -378,7 +378,7 @@ async def test_poll_interval_ramps_instead_of_staying_flat(
     async def record(delay: float) -> None:
         slept.append(delay)
 
-    monkeypatch.setattr(comfy_client_module.asyncio, "sleep", record)
+    monkeypatch.setattr(asyncio, "sleep", record)
     respx.get("http://comfy/history/ramp-id").mock(
         side_effect=[httpx.Response(200, json={}) for _ in range(8)]
         + [httpx.Response(200, json={"ramp-id": {"outputs": {}}})]
@@ -415,7 +415,7 @@ async def test_poll_interval_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
     async def record(delay: float) -> None:
         slept.append(delay)
 
-    monkeypatch.setattr(comfy_client_module.asyncio, "sleep", record)
+    monkeypatch.setattr(asyncio, "sleep", record)
     respx.get("http://comfy/history/capped-id").mock(
         side_effect=[httpx.Response(200, json={}) for _ in range(40)]
         + [httpx.Response(200, json={"capped-id": {"outputs": {}}})]

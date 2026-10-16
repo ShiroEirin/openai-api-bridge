@@ -29,7 +29,9 @@ def _prepare(rec: WorkflowRecord, **kwargs: Any) -> dict[str, Any]:
     return prepare_workflow(rec, read_graph_text(rec), **kwargs)
 
 
-def _write_pair(workflows_dir: Path, name: str, graph: dict, meta: dict) -> Path:
+def _write_pair(
+    workflows_dir: Path, name: str, graph: dict[str, Any], meta: dict[str, Any]
+) -> Path:
     j = workflows_dir / f"{name}.json"
     m = workflows_dir / f"{name}.meta.json"
     j.write_text(json.dumps(graph))

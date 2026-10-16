@@ -11,15 +11,16 @@ from __future__ import annotations
 import asyncio
 import time
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import httpx2
 import pytest
+from fastapi import FastAPI
 
 from openai_api_bridge.api.models import _entries_for, list_models
 from openai_api_bridge.backends.base import Backend, ModelEntry
 from openai_api_bridge.errors import UpstreamError
-from openai_api_bridge.resources import install
+from openai_api_bridge.resources import BridgeResources, install
 
 
 class _BarrierBackend(Backend):
@@ -62,7 +63,7 @@ def _request_with(providers: list[tuple[str, Backend]], *, budget: float = 5.0) 
         settings=SimpleNamespace(models_timeout_seconds=budget),
     )
     app = SimpleNamespace(state=SimpleNamespace())
-    install(app, stub)
+    install(cast(FastAPI, app), cast(BridgeResources, stub))
     return SimpleNamespace(app=app)
 
 

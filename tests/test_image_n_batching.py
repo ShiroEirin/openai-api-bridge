@@ -12,6 +12,7 @@ running (and billing) after another has failed.
 from __future__ import annotations
 
 import asyncio
+import functools
 
 import httpx
 import pytest
@@ -212,4 +213,4 @@ async def test_run_all_preserves_order_and_returns_every_result() -> None:
         await asyncio.sleep((5 - i) * 0.01)
         return i
 
-    assert await run_all([lambda i=i: make(i) for i in range(5)]) == [0, 1, 2, 3, 4]
+    assert await run_all([functools.partial(make, i) for i in range(5)]) == [0, 1, 2, 3, 4]

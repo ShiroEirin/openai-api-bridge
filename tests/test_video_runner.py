@@ -33,7 +33,7 @@ class _StubBackend(Backend):
     async def list_models(self) -> list[ModelEntry]:
         return []
 
-    async def generate_video(self, **kwargs: Any) -> GeneratedAsset:  # type: ignore[override]
+    async def generate_video(self, **kwargs: Any) -> GeneratedAsset:
         result: GeneratedAsset = await self._generate(**kwargs)
         return result
 

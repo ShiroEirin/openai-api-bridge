@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from typing import NoReturn
 
 import httpx  # respx authors its mocks in v1 types; see tests/conftest.py
 import httpx2  # what bridge code actually raises and receives
@@ -25,7 +26,7 @@ from openai_api_bridge.util.cache import AsyncTTLCache
 from openai_api_bridge.util.http import raise_for_upstream_status
 
 
-def _raise(status: int, body: str = "upstream said no"):
+def _raise(status: int, body: str = "upstream said no") -> NoReturn:
     raise_for_upstream_status(status=status, body=body, provider="TestProvider", endpoint="/thing")
 
 
@@ -79,7 +80,7 @@ def test_non_auth_errors_do_surface_the_body(status: int) -> None:
     """Diagnostics still reach the client where there's no credential in play."""
     with pytest.raises((InvalidRequest, UpstreamError)) as exc:
         _raise(status, body="prompt was rejected by the safety filter")
-    assert "safety filter" in exc.value.message  # type: ignore[attr-defined]
+    assert "safety filter" in exc.value.message
 
 
 @pytest.mark.parametrize("status", [401, 403])

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
-from openai_api_bridge.resources import install, resources
+from openai_api_bridge.resources import BridgeResources, install, resources
 
 
 def _fake_request() -> Any:
@@ -16,7 +16,7 @@ def _fake_request() -> Any:
 
 def test_install_then_read_round_trips() -> None:
     request = _fake_request()
-    graph = SimpleNamespace(dispatcher="d", settings="s")
+    graph = cast(BridgeResources, SimpleNamespace(dispatcher="d", settings="s"))
     install(request.app, graph)
     assert resources(request) is graph
 
@@ -33,9 +33,7 @@ def test_resources_are_frozen() -> None:
     """Nothing should swap a live dispatcher out from under an in-flight
     request, so the container refuses assignment rather than relying on
     convention."""
-    from openai_api_bridge.resources import BridgeResources
-
     fields = BridgeResources.__dataclass_fields__
     graph = BridgeResources(**dict.fromkeys(fields, None))  # type: ignore[arg-type]
     with pytest.raises(AttributeError):
-        graph.dispatcher = None  # type: ignore[misc]
+        graph.dispatcher = graph.dispatcher  # type: ignore[misc]

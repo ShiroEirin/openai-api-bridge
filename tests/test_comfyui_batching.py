@@ -22,6 +22,7 @@ from typing import Any
 import pytest
 
 from openai_api_bridge.backends.comfyui.adapter import ComfyUIBackend
+from openai_api_bridge.backends.comfyui.workflows import WorkflowRecord
 from openai_api_bridge.config import ComfyUIProviderConfig
 from openai_api_bridge.errors import UpstreamError
 
@@ -153,11 +154,11 @@ async def test_workflows_are_not_rescanned_when_nothing_changed(
 ) -> None:
     """cache_workflows=false rescanned on every request; now it stats instead."""
     from openai_api_bridge.backends.comfyui import adapter as adapter_module
+    from openai_api_bridge.backends.comfyui.workflows import scan_workflows as real_scan
 
     scans = 0
-    real_scan = adapter_module.scan_workflows
 
-    def counting_scan(d: Path):
+    def counting_scan(d: Path) -> dict[str, WorkflowRecord]:
         nonlocal scans
         scans += 1
         return real_scan(d)
@@ -236,7 +237,7 @@ async def test_batch_budgets_the_whole_queue_not_a_single_run(workflows_dir: Pat
         seen.append(timeout_seconds)
         return {"outputs": {}}
 
-    recorder.poll_completion = poll  # type: ignore[assignment]
+    recorder.poll_completion = poll  # type: ignore[method-assign]
     backend.client = recorder  # type: ignore[assignment]
 
     await backend.generate_image(model_slug="wf", prompt="a cat", n=4)
@@ -261,7 +262,7 @@ async def test_single_run_keeps_the_plain_per_run_budget(workflows_dir: Path) ->
         seen.append(timeout_seconds)
         return {"outputs": {}}
 
-    recorder.poll_completion = poll  # type: ignore[assignment]
+    recorder.poll_completion = poll  # type: ignore[method-assign]
     backend.client = recorder  # type: ignore[assignment]
 
     await backend.generate_image(model_slug="wf", prompt="a cat", n=1)
@@ -290,7 +291,7 @@ async def test_one_failing_collector_cancels_its_siblings(workflows_dir: Path) -
         finished.append(prompt_id)
         return {"outputs": {}}
 
-    recorder.poll_completion = poll  # type: ignore[assignment]
+    recorder.poll_completion = poll  # type: ignore[method-assign]
 
     start = time.perf_counter()
     with pytest.raises(UpstreamError):
@@ -315,7 +316,7 @@ async def test_failed_submit_reports_the_orphaned_prompts(
             raise UpstreamError("ComfyUI rejected the prompt")
         return f"p{calls}"
 
-    recorder.submit_prompt = submit  # type: ignore[assignment]
+    recorder.submit_prompt = submit  # type: ignore[method-assign]
 
     with caplog.at_level(logging.WARNING), pytest.raises(UpstreamError):
         await backend.generate_image(model_slug="wf", prompt="a cat", n=4)
@@ -342,7 +343,7 @@ async def test_cancelled_siblings_have_their_prompts_recalled(workflows_dir: Pat
         await asyncio.sleep(5.0)
         return {"outputs": {}}
 
-    recorder.poll_completion = poll  # type: ignore[assignment]
+    recorder.poll_completion = poll  # type: ignore[method-assign]
 
     with pytest.raises(UpstreamError):
         await backend.generate_image(model_slug="wf", prompt="a cat", n=3)
@@ -368,7 +369,7 @@ async def test_successfully_collected_prompts_are_not_recalled(workflows_dir: Pa
         await done.wait()
         raise UpstreamError("ComfyUI dropped the prompt")
 
-    recorder.poll_completion = poll  # type: ignore[assignment]
+    recorder.poll_completion = poll  # type: ignore[method-assign]
 
     with pytest.raises(UpstreamError):
         await backend.generate_image(model_slug="wf", prompt="a cat", n=2)
@@ -392,7 +393,7 @@ async def test_cancelling_a_single_run_recalls_its_prompt(workflows_dir: Path) -
         await asyncio.sleep(30.0)
         return {"outputs": {}}
 
-    recorder.poll_completion = poll  # type: ignore[assignment]
+    recorder.poll_completion = poll  # type: ignore[method-assign]
 
     task = asyncio.create_task(backend.generate_image(model_slug="wf", prompt="a cat", n=1))
     await polling.wait()
@@ -419,8 +420,8 @@ async def test_discard_is_bounded_when_comfyui_hangs(workflows_dir: Path) -> Non
     ) -> dict[str, Any]:
         raise UpstreamError("ComfyUI dropped the prompt")
 
-    recorder.delete_queued = hanging_delete  # type: ignore[assignment]
-    recorder.poll_completion = poll  # type: ignore[assignment]
+    recorder.delete_queued = hanging_delete  # type: ignore[method-assign]
+    recorder.poll_completion = poll  # type: ignore[method-assign]
 
     monkeypatched = 0.05
     from openai_api_bridge.backends.comfyui import adapter as adapter_module
@@ -453,11 +454,11 @@ async def test_batch_reads_the_graph_once_not_once_per_run(
     blocking read and parse of a 50-200KB file per run, on the event loop the
     whole bridge shares."""
     from openai_api_bridge.backends.comfyui import adapter as adapter_module
+    from openai_api_bridge.backends.comfyui.workflows import read_graph_text as real
 
     reads: list[str] = []
-    real = adapter_module.read_graph_text
 
-    def counting(record: Any) -> str:
+    def counting(record: WorkflowRecord) -> str:
         reads.append(record.slug)
         return real(record)
 
@@ -564,7 +565,7 @@ async def test_image_polling_never_eases_out_past_its_ceiling(workflows_dir: Pat
         seen["max_interval"] = max_interval
         return {"outputs": {}}
 
-    recorder.poll_completion = capture  # type: ignore[assignment]
+    recorder.poll_completion = capture  # type: ignore[method-assign]
 
     await backend.generate_image(model_slug="wf", prompt="a cat", n=1)
 

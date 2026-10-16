@@ -163,3 +163,6 @@ strict = true
 warn_unreachable = true
 warn_redundant_casts = true
 plugins = ["pydantic.mypy"]
+# tests/test_release_draft.py imports scripts/release_notes.py off sys.path;
+# this is the same lookup, so the import is checked rather than unresolved.
+mypy_path = "scripts"

@@ -96,7 +96,9 @@ async def test_set_pinned_and_delete(filestore: FileStore, files_dir: Path) -> N
         source_backend="x",
         source_model="m",
     )
-    abs_path = files_dir / (await filestore.get_metadata(fid)).storage_path
+    stored = await filestore.get_metadata(fid)
+    assert stored is not None
+    abs_path = files_dir / stored.storage_path
 
     await filestore.set_pinned(fid, True)
     meta = await filestore.get_metadata(fid)

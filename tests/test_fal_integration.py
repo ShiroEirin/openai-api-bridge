@@ -20,10 +20,12 @@ import asyncio
 import json
 import textwrap
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any, NamedTuple
 
 import httpx
+import httpx2
 import pytest
 import respx
 from fastapi.testclient import TestClient
@@ -121,11 +123,12 @@ def _mock_generation(model_id: str, url: str = "https://v3.fal.media/files/out.p
     return gen
 
 
-def _sent_body(route: respx.Route) -> dict:
-    return json.loads(route.calls.last.request.read())
+def _sent_body(route: respx.Route) -> dict[str, Any]:
+    body: dict[str, Any] = json.loads(route.calls.last.request.read())
+    return body
 
 
-def _generate(client: TestClient, model_id: str, **extra: object) -> httpx.Response:
+def _generate(client: TestClient, model_id: str, **extra: object) -> httpx2.Response:
     body: dict[str, object] = {"model": f"fal/{model_id}", "prompt": "a red panda"}
     body.update(extra)
     return client.post("/v1/images/generations", headers=HEADERS, json=body)
@@ -383,7 +386,7 @@ def test_unconfigured_model_is_model_not_found(client_with_fal: TestClient) -> N
 MODELS_API = "https://api.fal.ai/v1/models"
 
 
-def _openapi(model_title: str, props: dict) -> dict:
+def _openapi(model_title: str, props: dict[str, Any]) -> dict[str, Any]:
     """Minimal fal-shaped OpenAPI doc with the given input properties."""
     return {
         "openapi": "3.0.4",
@@ -410,7 +413,7 @@ def _openapi(model_title: str, props: dict) -> dict:
     }
 
 
-def _stub_models_api(schemas: dict[str, dict]) -> None:
+def _stub_models_api(schemas: dict[str, dict[str, Any]]) -> None:
     respx.get(MODELS_API).mock(
         return_value=httpx.Response(
             200,
@@ -610,7 +613,7 @@ async def test_concurrent_first_requests_share_one_lookup(
     assert all(r == {"enable_safety_checker": False} for r in results)
 
 
-async def _safety(backend: FalBackend, mcfg: FalModelConfig) -> dict:
+async def _safety(backend: FalBackend, mcfg: FalModelConfig) -> dict[str, Any]:
     """Moderation params for a model whose endpoint is its own id (i.e. not a
     routed edit, which resolves against the sibling's schema instead)."""
     return await backend._safety_params(mcfg, mcfg.id)
@@ -836,7 +839,7 @@ def discovering_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Itera
     reset_caches_for_tests()
 
 
-def _catalog_page(models: list[tuple[str, str]], has_more: bool = False) -> dict:
+def _catalog_page(models: list[tuple[str, str]], has_more: bool = False) -> dict[str, Any]:
     return {
         "models": [
             {"endpoint_id": mid, "metadata": {"display_name": name, "category": "text-to-image"}}
@@ -847,7 +850,7 @@ def _catalog_page(models: list[tuple[str, str]], has_more: bool = False) -> dict
     }
 
 
-def _stub_catalog(pages_by_category: dict[str, list[dict]]) -> respx.Route:
+def _stub_catalog(pages_by_category: dict[str, list[dict[str, Any]]]) -> respx.Route:
     """Serve catalogue pages per category, honouring the cursor for pagination."""
     state: dict[str, int] = {}
 
@@ -1474,7 +1477,7 @@ def _stub_video_job(
     model_id: str = VIDEO_MODEL,
     *,
     statuses: list[str] | None = None,
-    result: dict | None = None,
+    result: dict[str, Any] | None = None,
 ) -> respx.Route:
     """Stub fal's queue lifecycle: submit -> status -> result -> asset."""
     req = "req-123"
@@ -1509,9 +1512,9 @@ def _stub_video_job(
     return submit
 
 
-def _await_video(client: TestClient, job_id: str) -> dict:
+def _await_video(client: TestClient, job_id: str) -> dict[str, Any]:
     deadline = time.time() + 5.0
-    state: dict = {}
+    state: dict[str, Any] = {}
     while time.time() < deadline:
         r = client.get(f"/v1/videos/{job_id}", headers=HEADERS)
         assert r.status_code == 200
@@ -1655,8 +1658,11 @@ def test_video_models_are_listed_with_video_kind(discovering_client: TestClient)
 # point of failure.
 
 
+_Responder = Callable[[httpx.Request], httpx.Response]
+
+
 def _stub_video_job_with(
-    status_responder: object, result_responder: object, model_id: str = VIDEO_MODEL
+    status_responder: _Responder, result_responder: _Responder, model_id: str = VIDEO_MODEL
 ) -> respx.Route:
     req = "req-flaky"
     submit = respx.post(f"{QUEUE}/{model_id}").mock(
@@ -1876,14 +1882,14 @@ def test_expiration_below_the_floor_is_rejected() -> None:
 # --- collapsing edit variants ----------------------------------------------
 
 
-def _cat_entry(model_id: str, category: str, name: str | None = None) -> dict:
+def _cat_entry(model_id: str, category: str, name: str | None = None) -> dict[str, Any]:
     return {
         "endpoint_id": model_id,
         "metadata": {"display_name": name or model_id, "category": category},
     }
 
 
-def _stub_catalog_entries(entries: list[dict]) -> respx.Route:
+def _stub_catalog_entries(entries: list[dict[str, Any]]) -> respx.Route:
     def responder(request: httpx.Request) -> httpx.Response:
         if request.url.params.get("expand"):
             return httpx.Response(200, json={"models": []})
@@ -2385,7 +2391,7 @@ def test_ref_encoded_enums_are_resolved() -> None:
     from openai_api_bridge.backends.fal.safety import safety_params_from_schema
     from openai_api_bridge.backends.fal.schema import duration_params, duration_property
 
-    spec = {
+    spec: dict[str, Any] = {
         "paths": {
             "/m": {
                 "post": {
@@ -2422,7 +2428,13 @@ def test_ref_encoded_enums_are_resolved() -> None:
 # poll loop that isn't a finished clip has to tell fal to stop.
 
 
-def _stub_cancellable_job(model_id: str = VIDEO_MODEL) -> dict[str, respx.Route]:
+class _CancellableJob(NamedTuple):
+    submit: respx.Route
+    cancel: respx.Route
+    base: str
+
+
+def _stub_cancellable_job(model_id: str = VIDEO_MODEL) -> _CancellableJob:
     req = "req-cancel"
     base = f"{QUEUE}/{model_id}/requests/{req}"
     submit = respx.post(f"{QUEUE}/{model_id}").mock(
@@ -2439,7 +2451,7 @@ def _stub_cancellable_job(model_id: str = VIDEO_MODEL) -> dict[str, respx.Route]
     cancel = respx.put(f"{base}/cancel").mock(
         return_value=httpx.Response(202, json={"status": "CANCELLATION_REQUESTED"})
     )
-    return {"submit": submit, "cancel": cancel, "base": base}
+    return _CancellableJob(submit=submit, cancel=cancel, base=base)
 
 
 @respx.mock
@@ -2450,7 +2462,7 @@ async def test_client_cancellation_stops_the_upstream_render(
     rendering — and billing — to completion, unread."""
     monkeypatch.setenv("TEST_FAL_TOKEN", "fal-secret")
     routes = _stub_cancellable_job()
-    respx.get(f"{routes['base']}/status").mock(
+    respx.get(f"{routes.base}/status").mock(
         return_value=httpx.Response(200, json={"status": "IN_PROGRESS"})
     )
 
@@ -2464,7 +2476,7 @@ async def test_client_cancellation_stops_the_upstream_render(
     finally:
         await backend.aclose()
 
-    assert routes["cancel"].called, "an abandoned job must be cancelled upstream"
+    assert routes.cancel.called, "an abandoned job must be cancelled upstream"
 
 
 @respx.mock
@@ -2472,7 +2484,7 @@ async def test_timeout_stops_the_upstream_render(monkeypatch: pytest.MonkeyPatch
     """Giving up locally leaves fal rendering just as surely as a DELETE does."""
     monkeypatch.setenv("TEST_FAL_TOKEN", "fal-secret")
     routes = _stub_cancellable_job()
-    respx.get(f"{routes['base']}/status").mock(
+    respx.get(f"{routes.base}/status").mock(
         return_value=httpx.Response(200, json={"status": "IN_QUEUE"})
     )
 
@@ -2496,7 +2508,7 @@ async def test_timeout_stops_the_upstream_render(monkeypatch: pytest.MonkeyPatch
     finally:
         await backend.aclose()
 
-    assert routes["cancel"].called
+    assert routes.cancel.called
 
 
 @respx.mock
@@ -2504,10 +2516,10 @@ async def test_completed_job_is_not_cancelled(monkeypatch: pytest.MonkeyPatch) -
     """Only abandonment triggers it — a collected clip must not be cancelled."""
     monkeypatch.setenv("TEST_FAL_TOKEN", "fal-secret")
     routes = _stub_cancellable_job()
-    respx.get(f"{routes['base']}/status").mock(
+    respx.get(f"{routes.base}/status").mock(
         return_value=httpx.Response(200, json={"status": "COMPLETED"})
     )
-    respx.get(routes["base"]).mock(
+    respx.get(routes.base).mock(
         return_value=httpx.Response(200, json={"video": {"url": "https://v3.fal.media/o.mp4"}})
     )
     respx.get("https://v3.fal.media/o.mp4").mock(
@@ -2521,7 +2533,7 @@ async def test_completed_job_is_not_cancelled(monkeypatch: pytest.MonkeyPatch) -
     finally:
         await backend.aclose()
 
-    assert not routes["cancel"].called
+    assert not routes.cancel.called
 
 
 @respx.mock
@@ -2532,10 +2544,10 @@ async def test_a_failing_cancel_does_not_mask_the_original_error(
     us to abandon the job."""
     monkeypatch.setenv("TEST_FAL_TOKEN", "fal-secret")
     routes = _stub_cancellable_job()
-    respx.put(f"{routes['base']}/cancel").mock(
+    respx.put(f"{routes.base}/cancel").mock(
         return_value=httpx.Response(500, json={"error": "cancel unavailable"})
     )
-    respx.get(f"{routes['base']}/status").mock(
+    respx.get(f"{routes.base}/status").mock(
         return_value=httpx.Response(200, json={"status": "IN_QUEUE"})
     )
 

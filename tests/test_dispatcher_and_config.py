@@ -42,11 +42,11 @@ def test_bridge_settings_rejects_unusable_api_key(bad: str) -> None:
     logs to say so.
     """
     with pytest.raises(ValidationError):
-        BridgeSettings(BRIDGE_API_KEY=bad)  # type: ignore[call-arg]
+        BridgeSettings(BRIDGE_API_KEY=bad)
 
 
 def test_bridge_settings_accepts_a_real_key() -> None:
-    settings = BridgeSettings(BRIDGE_API_KEY="0123456789abcdef")  # type: ignore[call-arg]
+    settings = BridgeSettings(BRIDGE_API_KEY="0123456789abcdef")  # gitleaks:allow
     assert settings.api_key == "0123456789abcdef"
 
 
@@ -61,7 +61,7 @@ def test_bridge_settings_preserves_key_verbatim() -> None:
     survive the wire at all and is now rejected outright; see
     ``test_bridge_settings_rejects_a_trailing_whitespace_key``.
     """
-    settings = BridgeSettings(BRIDGE_API_KEY="  0123456789abcdef")  # type: ignore[call-arg]
+    settings = BridgeSettings(BRIDGE_API_KEY="  0123456789abcdef")  # gitleaks:allow
     assert settings.api_key == "  0123456789abcdef"
 
 
@@ -221,7 +221,7 @@ def test_bridge_settings_rejects_a_trailing_whitespace_key(bad: str) -> None:
     cause.
     """
     with pytest.raises(ValidationError, match="trailing whitespace"):
-        BridgeSettings(BRIDGE_API_KEY=bad)  # type: ignore[call-arg]
+        BridgeSettings(BRIDGE_API_KEY=bad)
 
 
 def test_bridge_settings_allows_a_leading_whitespace_key() -> None:
@@ -230,7 +230,7 @@ def test_bridge_settings_allows_a_leading_whitespace_key() -> None:
     ``Authorization: Bearer  secret`` presents as ``" secret"`` after the
     prefix is removed. Rejecting it would break a working deployment.
     """
-    settings = BridgeSettings(BRIDGE_API_KEY=" 0123456789abcdef")  # type: ignore[call-arg]
+    settings = BridgeSettings(BRIDGE_API_KEY=" 0123456789abcdef")  # gitleaks:allow
     assert settings.api_key == " 0123456789abcdef"
 
 
@@ -238,7 +238,10 @@ def test_bridge_settings_allows_a_leading_whitespace_key() -> None:
 def test_bridge_settings_rejects_a_negative_request_cap(value: int) -> None:
     """Only 0 is documented to disable the cap; a negative would do it silently."""
     with pytest.raises(ValidationError):
-        BridgeSettings(BRIDGE_API_KEY="0123456789abcdef", BRIDGE_MAX_REQUEST_MB=value)  # type: ignore[call-arg]
+        BridgeSettings(
+            BRIDGE_API_KEY="0123456789abcdef",  # gitleaks:allow
+            BRIDGE_MAX_REQUEST_MB=value,
+        )
 
 
 def test_provider_configs_reject_a_negative_asset_cap() -> None:

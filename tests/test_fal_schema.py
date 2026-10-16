@@ -66,13 +66,13 @@ def test_resolve_ref_edge_cases(node: Any, expected: Any) -> None:
 
 
 def test_input_schema_prefers_the_body_ref_named_input() -> None:
-    wanted = {"properties": {"prompt": {}}}
+    wanted: dict[str, Any] = {"properties": {"prompt": {}}}
     spec = _spec(schemas={"ModelInput": wanted})
     assert input_schema(spec) is wanted
 
 
 def test_input_schema_takes_an_inline_body_when_no_input_ref() -> None:
-    inline = {"properties": {"prompt": {}}}
+    inline: dict[str, Any] = {"properties": {"prompt": {}}}
     assert input_schema(_spec(body_ref=None, inline_body=inline)) == inline
 
 

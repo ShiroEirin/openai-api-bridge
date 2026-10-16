@@ -19,7 +19,8 @@ import pytest
 import respx
 from fastapi.testclient import TestClient
 
-from openai_api_bridge.config import reset_caches_for_tests
+from openai_api_bridge.backends.venice.adapter import VeniceBackend
+from openai_api_bridge.config import VeniceProviderConfig, reset_caches_for_tests
 
 UPSTREAM = "https://api.venice.ai"
 
@@ -317,8 +318,6 @@ async def test_degraded_listing_leaves_routing_unresolved(
     life of the process and edits never route again, with the listing looking
     perfectly healthy."""
     monkeypatch.setenv("VENICE_API_TOKEN", "venice-secret")
-    from openai_api_bridge.backends.venice.adapter import VeniceBackend
-    from openai_api_bridge.config import VeniceProviderConfig
 
     def responder(request: httpx.Request) -> httpx.Response:
         if request.url.params.get("type") == "inpaint":
@@ -341,10 +340,7 @@ async def test_degraded_listing_leaves_routing_unresolved(
 # --- catalogue caching -----------------------------------------------------
 
 
-def _venice_backend(**overrides: object) -> object:
-    from openai_api_bridge.backends.venice.adapter import VeniceBackend
-    from openai_api_bridge.config import VeniceProviderConfig
-
+def _venice_backend(**overrides: object) -> VeniceBackend:
     return VeniceBackend(
         VeniceProviderConfig(
             backend="venice", id="vn", api_token_env="VENICE_API_TOKEN", **overrides
