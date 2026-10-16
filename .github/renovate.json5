@@ -249,6 +249,7 @@
 				'globals',
 				'prettier',
 				'prettier-*',
+				'@biomejs/biome',
 				'knip',
 				'lint-staged',
 				'husky',
