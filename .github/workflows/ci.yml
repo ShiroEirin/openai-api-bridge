@@ -233,8 +233,8 @@ jobs:
       # ruff (check + format, from uv.lock) and the file-hygiene hooks. The
       # gitleaks hook in there only warns on a runner; the `secrets` job below
       # is the real scan.
-      - name: pre-commit
-        run: uv run --frozen pre-commit run --all-files --show-diff-on-failure
+      - name: prek
+        run: uv run --frozen prek run --all-files --show-diff-on-failure
 
       # Strict mode, as configured in pyproject.toml. `!cancelled()` so a lint
       # nit doesn't hide a type error in the same run. This matters most for
@@ -491,7 +491,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: tests/image-smoke/run.sh --imports-only openai-api-bridge:ci-arm64 linux/arm64
 
-  # Backstop for the pre-commit hook, which only runs where gitleaks is
+  # Backstop for the commit hook, which only runs where gitleaks is
   # installed and is skipped by `--no-verify` (and never runs for Dependabot's
   # commits). GitHub secret scanning and push protection also cover this public
   # repo; this is the check that fails a PR.

@@ -1,8 +1,9 @@
 {
 	// Renovate keeps the Python dependencies, action pins and pre-commit hooks
-	// here current, in place of Dependabot's version updates. Dependabot's
-	// SECURITY updates stay on: they are a repository setting rather than a
-	// config file, so a vulnerable package still arrives as a dependabot/** PR.
+	// (run by prek) here current, in place of Dependabot's version updates.
+	// Dependabot's SECURITY updates stay on: they are a repository setting
+	// rather than a config file, so a vulnerable package still arrives as a
+	// dependabot/** PR.
 	//
 	// Why the switch: Dependabot offers only a package's newest version, so a
 	// pending major replaced that package's minor and patch updates -- hence
@@ -23,7 +24,9 @@
 	// it is still beta upstream. Without this, dropping dependabot.yml would
 	// silently stop .pre-commit-config.yaml's `rev:` pins from ever moving
 	// again. One repo is pinned there today (pre-commit-hooks); ruff and
-	// gitleaks are local hooks with nothing to pin.
+	// gitleaks are local hooks with nothing to pin. The hooks run under prek,
+	// not pre-commit, but this manager parses the YAML file itself, whatever
+	// runs it; it does not read prek.toml, so the config stays YAML.
 	'pre-commit': {
 		enabled: true,
 	},
@@ -252,7 +255,7 @@
 				'publint',
 				'ruff',
 				'deptry',
-				'pre-commit',
+				'prek',
 				'pre-commit/pre-commit-hooks',
 			],
 			matchUpdateTypes: ['minor', 'patch'],

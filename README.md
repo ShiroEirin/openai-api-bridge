@@ -648,9 +648,16 @@ docker build -t openai-api-bridge:smoke .
 tests/image-smoke/run.sh openai-api-bridge:smoke
 ```
 
-`uv run pre-commit install` adds the commit hooks: a gitleaks scan of what's
-staged (skipped with a warning if `gitleaks` isn't installed), file hygiene,
-and ruff from `uv.lock`.
+`uv run prek install` adds the commit hooks, once per clone: a gitleaks scan of
+what's staged (skipped with a warning if `gitleaks` isn't installed), file
+hygiene, and ruff from `uv.lock`. A clone that ran `pre-commit install` before
+the switch to prek needs `uv run prek install --force`: without it prek keeps
+the old hook as `pre-commit.legacy` and runs it too, and with pre-commit no
+longer installed that fails every commit. `uv run prek run --all-files` runs
+the hooks over the whole tree, as CI does. [prek](https://prek.j178.dev) is a
+Rust reimplementation of pre-commit that reads the same
+`.pre-commit-config.yaml`; it runs the `pre-commit-hooks` file-hygiene checks
+with its own native versions rather than the pinned Python ones.
 
 ## CI and dependency updates
 
@@ -659,7 +666,7 @@ and ruff from `uv.lock`.
 
 | Job | What it checks |
 |---|---|
-| Lint + format + type-check | pre-commit (ruff, file hygiene) and `mypy src` |
+| Lint + format + type-check | prek (ruff, file hygiene) and `mypy src` |
 | Tests | `pytest --cov`: fails on any warning, and below the branch-coverage floor in `pyproject.toml` |
 | Workflow + Dockerfile lint | actionlint, zizmor, hadolint, and `CHANGELOG.md`'s structure |
 | Dependency audit | `pip-audit` over the production (`--no-dev`) lock |
@@ -687,7 +694,7 @@ separate `fal`-scoped commits for what a user experienced as one new backend.
 `scripts/release_notes.py <tag> --draft` still prints that grouping, as
 scaffolding to condense by hand — never the entry itself.
 
-Renovate proposes GitHub Actions, `uv` and pre-commit updates, each release
+Renovate proposes GitHub Actions, `uv` and pre-commit hook updates, each release
 held back a week, and merges a PR once CI is green if every update in it is a
 patch, a minor outside 0.x, or a 0.x minor of an allowlisted package whose
 breakage a test would catch. A PR that falls behind `main` is rebased and

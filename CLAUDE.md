@@ -28,9 +28,14 @@ uv run ruff check .          # lint
 uv run ruff format .         # format
 uv run mypy src              # type-check (strict mode is on)
 uv run deptry .              # unused/undeclared dependencies (CI gates on it)
-uv run pre-commit run --all-files   # gitleaks (staged) + file hygiene + ruff from uv.lock
+uv run prek run --all-files         # gitleaks (staged) + file hygiene + ruff from uv.lock
 tests/image-smoke/run.sh <image>    # boot-test a built runtime image, as CI does
 ```
+
+The commit hooks run under prek (a Rust pre-commit); `uv run prek install`
+once per clone (`--force` over an old pre-commit hook, or prek keeps it as
+`pre-commit.legacy`, runs it, and every commit fails). prek runs the `pre-commit-hooks` checks (whitespace, EOF,
+YAML/TOML, large files) as its own Rust builtins, not the pinned Python ones.
 
 Local dev run: `cp config.toml.example config.toml`, `cp .env.example .env` (set
 `BRIDGE_API_KEY`), then `set -a && source .env && set +a && uv run openai-api-bridge`.
@@ -151,7 +156,10 @@ unreviewed. Keep that in mind when touching CI:
   nothing when an update already satisfies an open-ended floor like
   `ruff>=0.16.2`, so almost nothing would be proposed, and the pre-commit
   manager is off by default, so `.pre-commit-config.yaml`'s `rev:` pins would
-  quietly stop moving.
+  quietly stop moving. The hooks run under prek, not pre-commit, but the
+  manager reads the YAML file itself, whichever tool runs it — which is also
+  why the config stays `.pre-commit-config.yaml` rather than prek's own
+  `prek.toml`, a file Renovate does not parse.
 - Updates come on a weekly timetable, each group in a slot on its own day (see
   `schedule` in `renovate.json5`); nothing wakes Renovate between its
   four-hourly runs, so a rebase after a merge waits for the next one.

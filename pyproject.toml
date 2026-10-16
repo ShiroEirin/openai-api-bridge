@@ -48,7 +48,8 @@ dev = [
   # build what respx returns, httpx2 for objects handed straight to src.
   "httpx>=0.28.1",
   "mypy>=2.3.0",
-  "pre-commit>=4.0.0",
+  # Runs .pre-commit-config.yaml; a Rust reimplementation of pre-commit.
+  "prek>=0.5.5",
   "pytest>=9.1.1",
   "pytest-asyncio>=1.4.0",
   # For tests/test_ci_workflow.py, which parses the workflow files to
@@ -64,7 +65,7 @@ dev = [
   "pytest-httpx2>=1.0.0",
   "respx>=0.23.1",
   # 0.16 expanded the default rule set and started formatting Python blocks in
-  # Markdown. pre-commit and CI both run this ruff from uv.lock (see
+  # Markdown. The commit hooks and CI both run this ruff from uv.lock (see
   # .pre-commit-config.yaml), so the floor only keeps a re-lock from going back.
   "ruff>=0.16.2",
 ]
