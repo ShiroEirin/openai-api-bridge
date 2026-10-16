@@ -255,6 +255,7 @@
 				'publint',
 				'ruff',
 				'deptry',
+				'pre-commit',
 				'prek',
 				'pre-commit/pre-commit-hooks',
 			],
