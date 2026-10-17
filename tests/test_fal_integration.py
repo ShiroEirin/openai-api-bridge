@@ -30,7 +30,8 @@ import pytest
 import respx
 from fastapi.testclient import TestClient
 
-from openai_api_bridge.backends.fal.adapter import SUPPORTED_CATEGORIES, FalBackend
+from openai_api_bridge.backends.fal.adapter import FalBackend
+from openai_api_bridge.backends.fal.catalog import SUPPORTED_CATEGORIES
 from openai_api_bridge.config import FalModelConfig, FalProviderConfig, reset_caches_for_tests
 from openai_api_bridge.errors import BridgeError
 
