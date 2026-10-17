@@ -94,8 +94,7 @@ async def test_image_to_video_goes_out_as_multipart_with_the_reference(
         prompt="make it move",
         size="720x720",
         seconds=3,
-        input_reference=b"JPEGBYTES",
-        input_reference_content_type="image/jpeg",
+        input_reference=InputImage(data=b"JPEGBYTES", content_type="image/jpeg"),
     )
 
     request = route.calls.last.request
@@ -115,7 +114,11 @@ async def test_image_to_video_goes_out_as_multipart_with_the_reference(
 async def test_image_to_video_reference_defaults_to_png(client: ImageRouterClient) -> None:
     route = respx.post(VIDEOS).mock(return_value=httpx.Response(200, json=OK))
 
-    await client.generate_video_url(model="m", prompt="p", input_reference=b"PNGBYTES")
+    await client.generate_video_url(
+        model="m",
+        prompt="p",
+        input_reference=InputImage(data=b"PNGBYTES", content_type="image/png"),
+    )
 
     assert b"Content-Type: image/png\r\n\r\nPNGBYTES" in route.calls.last.request.content
 

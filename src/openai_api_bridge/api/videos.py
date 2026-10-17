@@ -8,6 +8,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, Header, Request, Response, UploadFile
 
+from ..backends.base import InputImage
 from ..config import parse_model_id
 from ..errors import (
     InvalidRequest,
@@ -97,13 +98,14 @@ async def videos_create(
         ) from None
 
     with slot:
-        input_ref_bytes: bytes | None = None
-        input_ref_ct: str | None = None
+        reference: InputImage | None = None
         if input_reference is not None:
-            input_ref_bytes = await input_reference.read()
-            if not input_ref_bytes:
+            data = await input_reference.read()
+            if not data:
                 raise InvalidRequest("input_reference upload was empty", param="input_reference")
-            input_ref_ct = input_reference.content_type or "image/png"
+            reference = InputImage(
+                data=data, content_type=input_reference.content_type or "image/png"
+            )
 
         job_id = secrets.token_hex(16)
         job = await res.jobstore.create(
@@ -124,8 +126,7 @@ async def videos_create(
                 size=size,
                 aspect_ratio=aspect_ratio,
                 seconds=seconds,
-                input_reference=input_ref_bytes,
-                input_reference_content_type=input_ref_ct,
+                input_reference=reference,
                 dispatcher=res.dispatcher,
                 jobstore=res.jobstore,
                 filestore=res.filestore,

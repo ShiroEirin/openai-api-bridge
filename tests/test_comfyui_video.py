@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from openai_api_bridge.backends.base import InputImage
 from openai_api_bridge.backends.comfyui.adapter import ComfyUIBackend
 from openai_api_bridge.config import ComfyUIProviderConfig
 from openai_api_bridge.errors import ImageRequired
@@ -95,8 +96,7 @@ async def test_reference_image_is_uploaded_and_wired_into_the_image_node(
         model_slug="i2v-required",
         prompt="the cat walks",
         seconds=2,
-        input_reference=b"JPEGDATA",
-        input_reference_content_type="image/jpeg",
+        input_reference=InputImage(data=b"JPEGDATA", content_type="image/jpeg"),
         on_upstream_id=on_upstream_id,
     )
 
@@ -112,7 +112,11 @@ async def test_reference_image_is_uploaded_and_wired_into_the_image_node(
 async def test_reference_content_type_defaults_to_png(workflows_dir: Path) -> None:
     backend, recorder = _backend(workflows_dir)
 
-    await backend.generate_video(model_slug="i2v-optional", prompt="p", input_reference=b"PNGDATA")
+    await backend.generate_video(
+        model_slug="i2v-optional",
+        prompt="p",
+        input_reference=InputImage(data=b"PNGDATA", content_type="image/png"),
+    )
 
     assert recorder.uploads == [(b"PNGDATA", "image/png")]
 
@@ -145,7 +149,11 @@ async def test_a_workflow_without_image_inputs_ignores_a_reference(workflows_dir
     ComfyUI would then keep for no workflow to read."""
     backend, recorder = _backend(workflows_dir)
 
-    await backend.generate_video(model_slug="t2v", prompt="p", input_reference=b"PNGDATA")
+    await backend.generate_video(
+        model_slug="t2v",
+        prompt="p",
+        input_reference=InputImage(data=b"PNGDATA", content_type="image/png"),
+    )
 
     assert recorder.uploads == []
     assert len(recorder.submitted) == 1

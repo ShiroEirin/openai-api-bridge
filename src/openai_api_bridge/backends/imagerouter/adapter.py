@@ -144,8 +144,7 @@ class ImageRouterBackend(Backend):
         size: str | None = None,
         aspect_ratio: str | None = None,
         seconds: float | None = None,
-        input_reference: bytes | None = None,
-        input_reference_content_type: str | None = None,
+        input_reference: InputImage | None = None,
         on_upstream_id: UpstreamIdCallback | None = None,
     ) -> GeneratedAsset:
         # ImageRouter's video endpoint is synchronous — there's no upstream
@@ -159,7 +158,6 @@ class ImageRouterBackend(Backend):
             size=size,
             seconds=seconds,
             input_reference=input_reference,
-            input_reference_content_type=input_reference_content_type,
         )
         data, content_type = await self.client.fetch_asset(url)
         return GeneratedAsset(data=data, content_type=content_type, kind="video")

@@ -374,11 +374,13 @@ class Backend(ABC):
         size: str | None = None,
         aspect_ratio: str | None = None,
         seconds: float | None = None,
-        input_reference: bytes | None = None,
-        input_reference_content_type: str | None = None,
+        input_reference: InputImage | None = None,
         on_upstream_id: UpstreamIdCallback | None = None,
     ) -> GeneratedAsset:
         """Default: not supported. Override in backends that produce video.
+
+        ``input_reference`` is the still for an image-to-video request; its
+        ``content_type`` is already defaulted, so adapters need not guess.
 
         ``on_upstream_id`` is awaited once with the upstream's job id (e.g.
         ComfyUI's prompt_id) as soon as it's known, so the runner can persist

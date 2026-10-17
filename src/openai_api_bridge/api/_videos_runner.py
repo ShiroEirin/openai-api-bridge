@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from ..backends.base import InputImage
 from ..dispatcher import BackendDispatcher
 from ..errors import BridgeError
 from ..infra.filestore import FileStore
@@ -27,8 +28,7 @@ async def run_video_job(
     size: str | None,
     aspect_ratio: str | None,
     seconds: float | None,
-    input_reference: bytes | None,
-    input_reference_content_type: str | None,
+    input_reference: InputImage | None,
     dispatcher: BackendDispatcher,
     jobstore: JobStore,
     filestore: FileStore,
@@ -60,7 +60,6 @@ async def run_video_job(
             aspect_ratio=aspect_ratio,
             seconds=seconds,
             input_reference=input_reference,
-            input_reference_content_type=input_reference_content_type,
             on_upstream_id=_persist_upstream_id,
         )
         file_id = await filestore.put(

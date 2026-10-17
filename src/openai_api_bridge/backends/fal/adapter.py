@@ -543,8 +543,7 @@ class FalBackend(Backend):
         size: str | None = None,
         aspect_ratio: str | None = None,
         seconds: float | None = None,
-        input_reference: bytes | None = None,
-        input_reference_content_type: str | None = None,
+        input_reference: InputImage | None = None,
         on_upstream_id: UpstreamIdCallback | None = None,
     ) -> GeneratedAsset:
         """Generate a video through fal's queue lifecycle.
@@ -571,9 +570,7 @@ class FalBackend(Backend):
         if input_reference is not None:
             # fal's image-to-video models take the still as `image_url`, and
             # accept a data URI inline — no separate upload step.
-            content_type = input_reference_content_type or "image/png"
-            encoded = base64.b64encode(input_reference).decode("ascii")
-            body["image_url"] = f"data:{content_type};base64,{encoded}"
+            body["image_url"] = _data_uri(input_reference)
         derived = await self._derived_params(target)
         if seconds is not None and derived is not None:
             # Duration spellings differ per model ("8s" vs "10"), so the value

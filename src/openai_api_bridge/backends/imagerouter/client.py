@@ -175,8 +175,7 @@ class ImageRouterClient:
         prompt: str,
         size: str | None = None,
         seconds: float | None = None,
-        input_reference: bytes | None = None,
-        input_reference_content_type: str | None = None,
+        input_reference: InputImage | None = None,
     ) -> str:
         """Returns the URL of the generated video.
 
@@ -201,10 +200,10 @@ class ImageRouterClient:
 
         body: dict[str, Any]
         if input_reference is not None:
-            ct = input_reference_content_type or "image/png"
+            ct = input_reference.content_type
             body = {
                 "data": params,
-                "files": [("image[]", (_filename_for(ct), input_reference, ct))],
+                "files": [("image[]", (_filename_for(ct), input_reference.data, ct))],
             }
         else:
             body = {"json": params}

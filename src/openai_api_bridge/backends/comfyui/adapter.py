@@ -449,8 +449,7 @@ class ComfyUIBackend(Backend):
         size: str | None = None,
         aspect_ratio: str | None = None,
         seconds: float | None = None,
-        input_reference: bytes | None = None,
-        input_reference_content_type: str | None = None,
+        input_reference: InputImage | None = None,
         on_upstream_id: UpstreamIdCallback | None = None,
     ) -> GeneratedAsset:
         record = await self._record_for(model_slug)
@@ -468,8 +467,9 @@ class ComfyUIBackend(Backend):
                         param="input_reference",
                     )
             else:
-                ct = input_reference_content_type or "image/png"
-                comfy_filename = await self.client.upload_image(input_reference, ct)
+                comfy_filename = await self.client.upload_image(
+                    input_reference.data, input_reference.content_type
+                )
                 image_filenames = [comfy_filename]
         elif input_reference is not None:
             log.debug(
