@@ -9,6 +9,8 @@ task can do to a transaction while the first one is between two awaits.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -162,3 +164,50 @@ async def test_execute_inside_transaction_raises_rather_than_deadlocking(
             await tdb.execute("INSERT INTO t (id) VALUES ('nope')")
 
     assert await _rows(tdb) == set()
+
+
+async def test_a_failing_migration_applies_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """executescript runs in autocommit, so a migration failing partway once
+    kept its earlier statements with the version unbumped, and every later
+    boot re-ran it into "table already exists"."""
+    from openai_api_bridge.infra import db as db_module
+
+    monkeypatch.setattr(
+        db_module,
+        "_MIGRATIONS",
+        [
+            (1, "CREATE TABLE ok (x INTEGER);"),
+            (2, "CREATE TABLE half (x INTEGER); CREATE TABLE broken (;"),
+        ],
+    )
+    tdb = Database(tmp_path / "fresh.db")
+    await tdb.connect()
+    try:
+        await _check_atomic_migration(tdb, db_module, monkeypatch)
+    finally:
+        await tdb.close()
+
+
+async def _check_atomic_migration(
+    tdb: Database, db_module: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(Exception, match="syntax error"):
+        await db_module.run_migrations(tdb)
+
+    tables = {
+        r["name"] for r in await tdb.fetchall("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    assert "ok" in tables
+    assert "half" not in tables
+    row = await tdb.fetchone("SELECT value FROM meta WHERE key = 'schema_version'")
+    assert row is not None and row["value"] == "1"
+
+    # A fixed migration then applies cleanly on the next boot.
+    monkeypatch.setattr(
+        db_module,
+        "_MIGRATIONS",
+        [(1, "CREATE TABLE ok (x INTEGER);"), (2, "CREATE TABLE half (x INTEGER);")],
+    )
+    assert await db_module.run_migrations(tdb) == 2

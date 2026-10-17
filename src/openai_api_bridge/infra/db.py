@@ -218,10 +218,22 @@ async def run_migrations(db: Database) -> int:
     for version, sql in _MIGRATIONS:
         if version <= current:
             continue
-        await db.conn.executescript(sql)
-        await db.execute(
-            "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
-            (str(version),),
+        # One transaction for the script and the version bump. executescript
+        # runs in autocommit, so on its own a migration failing partway (or
+        # the process dying mid-script) kept whichever statements had run,
+        # left the version unbumped, and the next boot re-ran the script into
+        # "table already exists" and could not start. SQLite DDL is
+        # transactional, so all of it rolls back together instead.
+        script = (
+            f"BEGIN;\n{sql}\n"
+            f"INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '{int(version)}');\n"
+            "COMMIT;"
         )
+        try:
+            await db.conn.executescript(script)
+        except BaseException:
+            with suppress(Exception):
+                await db.conn.rollback()
+            raise
         current = version
     return current
