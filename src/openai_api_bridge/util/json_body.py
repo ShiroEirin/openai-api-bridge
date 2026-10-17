@@ -38,14 +38,24 @@ class JsonBody:
     """A parsed JSON object plus the bytes to send for it.
 
     ``fields`` is the whole parsed object; ``raw`` is UTF-8 JSON equivalent to
-    it. ``spans`` holds the ``(start, end)`` offsets of each top-level value in
-    ``text``, the decoded form ``raw`` was produced from.
+    it. ``spans`` holds the ``(start, end)`` offsets of each top-level value,
+    in characters, in ``raw`` decoded as UTF-8.
+
+    The decoded text is deliberately not kept. It lives as long as the body
+    does, which on a streaming chat completion is the whole stream, and a str
+    holding even one character outside the BMP (an emoji) is stored at four
+    bytes per character. Only :meth:`replace_top_level` needs it, so it
+    re-decodes ``raw`` there.
     """
 
     fields: Mapping[str, Any]
     raw: bytes
-    text: str = field(repr=False)
     spans: Mapping[str, tuple[tuple[int, int], ...]] = field(repr=False)
+
+    @property
+    def text(self) -> str:
+        """``raw`` decoded; the string ``spans`` index into."""
+        return self.raw.decode("utf-8", "surrogatepass")
 
     @classmethod
     def from_fields(cls, fields: Mapping[str, Any]) -> JsonBody:
@@ -67,19 +77,20 @@ class JsonBody:
             for key, value in updates.items()
             for start, end in self.spans[key]
         )
+        source = self.text
         parts: list[str] = []
         pos = 0
         # shift_before[i]: how far the text has moved by the start of edit i.
         shift_before: list[int] = []
         shift = 0
         for start, end, encoded in edits:
-            parts.append(self.text[pos:start])
+            parts.append(source[pos:start])
             parts.append(encoded)
             pos = end
             shift_before.append(shift)
             shift += len(encoded) - (end - start)
         shift_before.append(shift)
-        parts.append(self.text[pos:])
+        parts.append(source[pos:])
         text = "".join(parts)
         starts = [start for start, _, _ in edits]
         replaced = {start: len(encoded) for start, _, encoded in edits}
@@ -99,7 +110,6 @@ class JsonBody:
         return JsonBody(
             fields={**self.fields, **updates},
             raw=text.encode("utf-8", "surrogatepass"),
-            text=text,
             spans={k: tuple(_shifted(sp) for sp in v) for k, v in self.spans.items()},
         )
 
@@ -156,6 +166,5 @@ def parse_object(raw: bytes) -> JsonBody:
     return JsonBody(
         fields=fields,
         raw=out,
-        text=text,
         spans={k: tuple(v) for k, v in spans.items()},
     )

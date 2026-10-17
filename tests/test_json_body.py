@@ -128,3 +128,13 @@ def test_many_duplicate_keys_replace_in_bounded_time() -> None:
     start, end = out.spans["k19999"][0]
     assert out.text[start:end] == "19999"
     assert elapsed < 1.0
+
+
+def test_the_decoded_text_is_not_held() -> None:
+    """A body lives as long as its request (a whole stream, for chat); a str
+    with one non-BMP character is four bytes per character. Only the bytes
+    and the parsed fields are kept."""
+    assert "text" not in JsonBody.__slots__
+    body = parse_object('{"model": "p/m", "x": "\U0001f600"}'.encode())
+    out = body.replace_top_level({"model": "m"})
+    assert json.loads(out.raw) == {"model": "m", "x": "\U0001f600"}
