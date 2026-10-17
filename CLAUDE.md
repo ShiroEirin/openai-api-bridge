@@ -150,8 +150,10 @@ unreviewed. Keep that in mind when touching CI:
   `upgrade-check.yml` and `dependabot-automerge.yml` did those jobs before and
   are now deleted, with `scripts/major_upgrade_issues.py`: the weekly issues
   existed only because Dependabot could not offer a major without displacing a
-  package's routine updates. Dependabot **security** updates are untouched — a
-  repository setting, not a config file — and arrive as PRs to merge by hand.
+  package's routine updates. Security fixes come from Renovate too
+  (`osvVulnerabilityAlerts` and `vulnerabilityAlerts`, in the shared preset),
+  as PRs that never auto-merge; Dependabot's own security PRs are switched off
+  in the repository settings, and its alerts stay on.
 - `renovate.json5` extends the shared presets in
   [xiphux/renovate-config](https://github.com/xiphux/renovate-config) —
   `default.json5` and `python.json5`, the latter setting `rangeStrategy:

@@ -1,9 +1,9 @@
 {
 	// Renovate keeps the Python dependencies, action pins and pre-commit hooks
-	// (run by prek) here current, in place of Dependabot's version updates.
-	// Dependabot's SECURITY updates stay on: they are a repository setting
-	// rather than a config file, so a vulnerable package still arrives as a
-	// dependabot/** PR.
+	// (run by prek) here current, in place of Dependabot's version updates,
+	// and raises the security fixes too; Dependabot's own security pull
+	// requests are switched off in the repository settings, and its ALERTS
+	// stay on.
 	//
 	// Almost everything comes from the shared presets, xiphux/renovate-config:
 	// default.json5 holds the cooldowns, the auto-merge policy, the weekly

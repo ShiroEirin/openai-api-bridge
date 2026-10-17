@@ -725,5 +725,6 @@ than in place of them, and are never auto-merged. They are also not rebased
 while they sit: nothing is going to merge them until someone decides, so
 re-running the suite against them on every unrelated merge bought nothing.
 
-Dependabot **security** updates remain enabled — a repository setting rather
-than a config file — and arrive as PRs to merge by hand.
+Security fixes come from Renovate too, as PRs that skip the release-age
+cooldown and are never auto-merged. Dependabot's own security PRs are switched
+off in the repository settings; its alerts stay on.
