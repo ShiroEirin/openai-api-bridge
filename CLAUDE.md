@@ -152,17 +152,20 @@ unreviewed. Keep that in mind when touching CI:
   existed only because Dependabot could not offer a major without displacing a
   package's routine updates. Dependabot **security** updates are untouched — a
   repository setting, not a config file — and arrive as PRs to merge by hand.
-- `renovate.json5` sets `rangeStrategy: update-lockfile` for pep621 and opts the
-  `pre-commit` manager in. Both are load-bearing: the default strategy changes
-  nothing when an update already satisfies an open-ended floor like
-  `ruff>=0.16.2`, so almost nothing would be proposed, and the pre-commit
-  manager is off by default, so `.pre-commit-config.yaml`'s `rev:` pins would
-  quietly stop moving. The hooks run under prek, not pre-commit, but the
-  manager reads the YAML file itself, whichever tool runs it — which is also
-  why the config stays `.pre-commit-config.yaml` rather than prek's own
+- `renovate.json5` extends the shared presets in
+  [xiphux/renovate-config](https://github.com/xiphux/renovate-config) —
+  `default.json5` and `python.json5`, the latter setting `rangeStrategy:
+  update-lockfile` for pep621 — and keeps only what is this repository's own,
+  among it opting the `pre-commit` manager in. Those two are load-bearing: the
+  default strategy changes nothing when an update already satisfies an
+  open-ended floor like `ruff>=0.16.2`, so almost nothing would be proposed,
+  and the pre-commit manager is off by default, so `.pre-commit-config.yaml`'s
+  `rev:` pins would quietly stop moving. The hooks run under prek, not
+  pre-commit, but the manager reads the YAML file itself, whichever tool runs
+  it — which is also why the config stays `.pre-commit-config.yaml` rather than prek's own
   `prek.toml`, a file Renovate does not parse.
 - Updates come on a weekly timetable, each group in a slot on its own day (see
-  `schedule` in `renovate.json5`); nothing wakes Renovate between its
+  `schedule` in the shared `default.json5`); nothing wakes Renovate between its
   four-hourly runs, so a rebase after a merge waits for the next one.
 - A new runtime dependency with a native extension should get real work in
   `tests/image-smoke/smoke.py` — that's the only check of the `--no-dev`

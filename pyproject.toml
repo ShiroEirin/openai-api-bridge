@@ -82,11 +82,12 @@ dev = [
 # re-resolves the whole lockfile. uv records the cutoff in uv.lock, so CI's
 # `uv sync --locked` fails on a lock written without it.
 #
-# Keep it at or below the shortest age .github/renovate.json5 asks for (7
-# days), or Renovate's own PRs cannot resolve. Three days, as the pnpm
-# repositories use. A security fix younger than this can't be locked either,
-# though Renovate raises those immediately: for an urgent one, give the package
-# a shorter window in `exclude-newer-package` (e.g. `{ name = "1 hour" }`) with
+# Keep it at or below the shortest age Renovate asks for (3 days, for
+# patches, in the shared preset .github/renovate.json5 extends), or
+# Renovate's own PRs cannot resolve. Three days, as the pnpm repositories
+# use. A security fix younger than this can't be locked either, though
+# Renovate raises those immediately: for an urgent one, give the package a
+# shorter window in `exclude-newer-package` (e.g. `{ name = "1 hour" }`) with
 # a note, and remove it once that version is three days old.
 exclude-newer = "3 days"
 

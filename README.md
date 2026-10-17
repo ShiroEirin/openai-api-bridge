@@ -712,11 +712,13 @@ separate `fal`-scoped commits for what a user experienced as one new backend.
 scaffolding to condense by hand — never the entry itself.
 
 Renovate proposes GitHub Actions, `uv` and pre-commit hook updates, each release
-held back a week, and merges a PR once CI is green if every update in it is a
-patch, a minor outside 0.x, or a 0.x minor of an allowlisted package whose
-breakage a test would catch. A PR that falls behind `main` is rebased and
-re-checked before it lands. Everything else stays open for review;
-`renovate.json5` has the full rule and the allowlist's reasons.
+held back three days for a patch and a week otherwise, and merges a PR once CI
+is green if every update in it is a patch, a minor outside 0.x, or a 0.x minor
+of an allowlisted package whose breakage a test would catch. A PR that falls
+behind `main` is rebased and re-checked before it lands. Everything else stays
+open for review. `renovate.json5` has the allowlist's reasons, and the shared
+presets it extends ([xiphux/renovate-config](https://github.com/xiphux/renovate-config))
+the rest of the rule.
 
 Majors arrive as their own PRs, alongside a package's routine updates rather
 than in place of them, and are never auto-merged. They are also not rebased
