@@ -138,3 +138,17 @@ def test_the_decoded_text_is_not_held() -> None:
     body = parse_object('{"model": "p/m", "x": "\U0001f600"}'.encode())
     out = body.replace_top_level({"model": "m"})
     assert json.loads(out.raw) == {"model": "m", "x": "\U0001f600"}
+
+
+def test_from_fields_does_not_parse_its_own_encoding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bridge-built body (OpenRouter's image-over-chat, base64 references and
+    all) is encoded once, never decoded back just to record spans."""
+    from openai_api_bridge.util import json_body
+
+    def no_parse(raw: bytes) -> JsonBody:
+        raise AssertionError("from_fields parsed its own output")
+
+    monkeypatch.setattr(json_body, "parse_object", no_parse)
+    body = JsonBody.from_fields({"model": "m", "messages": [{"content": "x" * 1000}]})
+    assert json.loads(body.raw)["model"] == "m"
+    assert json.loads(body.replace_top_level({"model": "n"}).raw)["model"] == "n"

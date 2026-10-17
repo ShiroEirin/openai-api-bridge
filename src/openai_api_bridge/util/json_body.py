@@ -59,16 +59,24 @@ class JsonBody:
 
     @classmethod
     def from_fields(cls, fields: Mapping[str, Any]) -> JsonBody:
-        """Encode a body the bridge built itself."""
-        text = json.dumps(fields)
-        return parse_object(text.encode("utf-8"))
+        """Encode a body the bridge built itself.
+
+        Encoded once and not parsed back: the fields are already the parsed
+        form, and parsing the encoding only to record spans cost a full extra
+        decode of every base64 image in an OpenRouter edit, plus a second
+        copy of each data URL held for the whole upstream call. With no spans
+        recorded, :meth:`replace_top_level` re-encodes instead, which for a
+        body the bridge built is what it would have cost anyway.
+        """
+        return cls(fields=fields, raw=json.dumps(fields).encode("utf-8"), spans={})
 
     def replace_top_level(self, updates: Mapping[str, Any]) -> JsonBody:
         """A copy with existing top-level ``updates`` keys set to new values.
 
         Spliced into the original text, so only the replaced values are
-        encoded. A key that is absent, which the passthrough never asks for,
-        falls back to re-encoding the whole object.
+        encoded. A key with no recorded span — absent from the body, which
+        the passthrough never asks for, or any key of a body built with
+        :meth:`from_fields` — falls back to re-encoding the whole object.
         """
         if any(key not in self.spans for key in updates):
             return JsonBody.from_fields({**self.fields, **updates})
