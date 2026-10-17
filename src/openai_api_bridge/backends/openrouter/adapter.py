@@ -107,7 +107,7 @@ class OpenRouterBackend(Backend):
                     supports_tools=supports_tools,
                     capabilities=make_capabilities(
                         inputs if isinstance(inputs, list) else [],
-                        KIND_OUTPUT_MODALITY.get(kind or ""),
+                        KIND_OUTPUT_MODALITY.get(kind) if kind else None,
                     ),
                 )
             )

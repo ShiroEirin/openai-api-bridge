@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from ...errors import UnsupportedOperation, WorkflowInvalid
+from ...kinds import AssetKind
 from ...util.aspect import AspectRatio, parse_aspect_ratio, parse_aspect_ratios, snap_aspect_ratio
 from ...util.ids import slugify
 
@@ -37,7 +38,7 @@ class WorkflowRecord:
     slug: str
     json_path: Path
     meta: dict[str, Any]
-    output_type: str  # "image" | "video"
+    output_type: AssetKind
     display_name: str
     # Resolved at scan time rather than read from ``meta`` at use sites: the
     # literals need parsing and validating, and doing it once per scan means one
@@ -87,6 +88,7 @@ def scan_workflows(workflows_dir: Path) -> dict[str, WorkflowRecord]:
         # output type, or reading the aspect-ratio node's saved default. Most
         # workflows already pay for that read via autodetection.
         declared_type = meta.get("output_type")
+        output_type: AssetKind
         needs_autodetect = declared_type not in ("image", "video")
         wants_aspect = meta.get("aspect_ratio_node") is not None or "aspect_ratios" in meta
         graph = _read_graph(json_path) if needs_autodetect or wants_aspect else None
@@ -96,7 +98,7 @@ def scan_workflows(workflows_dir: Path) -> dict[str, WorkflowRecord]:
                 continue
             output_type = _output_type_of(graph)
         else:
-            output_type = str(declared_type)
+            output_type = "video" if declared_type == "video" else "image"
 
         aspect_ratios, aspect_ratio_default = _resolve_aspect_ratios(meta, graph, json_path.name)
 
@@ -181,7 +183,7 @@ def _read_graph(json_path: Path) -> dict[str, Any] | None:
     return parsed
 
 
-def _output_type_of(graph: dict[str, Any]) -> str:
+def _output_type_of(graph: dict[str, Any]) -> AssetKind:
     has_video = any(
         isinstance(node, dict) and node.get("class_type") in VIDEO_OUTPUT_CLASS_TYPES
         for node in graph.values()

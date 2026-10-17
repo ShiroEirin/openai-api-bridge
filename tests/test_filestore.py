@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from openai_api_bridge.infra.filestore import FileStore
+from openai_api_bridge.kinds import AssetKind
 
 
 async def test_put_and_get_roundtrip(filestore: FileStore) -> None:
@@ -77,7 +78,7 @@ async def test_extension_inference(filestore: FileStore, files_dir: Path) -> Non
         ("application/octet-stream", ""),
     ]
     for ct, expected_ext in cases:
-        kind = "video" if ct.startswith("video/") else "image"
+        kind: AssetKind = "video" if ct.startswith("video/") else "image"
         fid = await filestore.put(
             b"x", content_type=ct, kind=kind, source_backend="x", source_model="m"
         )
@@ -142,7 +143,7 @@ async def test_invalid_kind_rejected(filestore: FileStore) -> None:
         await filestore.put(
             b"x",
             content_type="image/png",
-            kind="audio",
+            kind="audio",  # type: ignore[arg-type]  # the runtime check is the point
             source_backend="x",
             source_model="m",
         )

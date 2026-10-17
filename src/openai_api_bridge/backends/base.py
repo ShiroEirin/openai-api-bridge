@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass, replace
 
 from ..errors import UnsupportedOperation
+from ..kinds import AssetKind, ModelKind
 from ..util.aspect import AspectRatio
 from ..util.json_body import JsonBody
 
@@ -74,7 +75,7 @@ class ModelEntry:
     """
 
     id: str
-    kind: str | None = None
+    kind: ModelKind | None = None
     display_name: str | None = None
     supports_tools: bool | None = None
     context_window: int | None = None
@@ -92,7 +93,7 @@ _INPUT_MODALITY_ORDER: tuple[str, ...] = ("text", "image", "video", "audio")
 # ModelEntry.kind is an output *category*; capability strings name the output
 # modality itself, so a chat model reads "image-to-text" rather than
 # "image-to-chat".
-KIND_OUTPUT_MODALITY: dict[str, str] = {
+KIND_OUTPUT_MODALITY: dict[ModelKind, str] = {
     "image": "image",
     "video": "video",
     "chat": "text",
@@ -298,7 +299,7 @@ class GeneratedAsset:
 
     data: bytes
     content_type: str
-    kind: str  # "image" | "video"
+    kind: AssetKind
     aspect_ratio: str | None = None
 
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 
 from ...config import ImageRouterProviderConfig
+from ...kinds import AssetKind
 from ...util.cache import AsyncTTLCache
 from ...util.concurrency import run_all
 from ..base import (
@@ -67,6 +68,7 @@ class ImageRouterBackend(Backend):
             # image and video output gets a single 'image' entry — bridge
             # clients pick by request shape (POST /v1/images vs /v1/videos),
             # not by the catalog kind, so the field is just a hint.
+            kind: AssetKind
             if "image" in outputs:
                 kind = "image"
             elif "video" in outputs:

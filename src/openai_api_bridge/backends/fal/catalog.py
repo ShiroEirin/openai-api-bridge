@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ...config import FalModelConfig
+from ...kinds import AssetKind
 from ..base import ModelEntry, disambiguate_display_names
 
 log = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ log = logging.getLogger(__name__)
 # fal categories this backend serves, mapped to the bridge's `kind` hint. The
 # audio and 3d categories fal also publishes stay out: there's no code path for
 # them, so listing them would advertise models every request would fail on.
-CATEGORY_KINDS: dict[str, str] = {
+CATEGORY_KINDS: dict[str, AssetKind] = {
     "text-to-image": "image",
     "image-to-image": "image",
     "text-to-video": "video",

@@ -16,6 +16,7 @@ import logging
 from typing import Any
 
 from ...errors import UpstreamError
+from ...kinds import ModelKind
 from ...util.http import fetch_asset_with_retry
 
 log = logging.getLogger(__name__)
@@ -104,7 +105,7 @@ async def fetch_image_bytes(url: str, *, max_bytes: int | None) -> tuple[bytes, 
     return await fetch_asset_with_retry(url, provider_label="OpenRouter", max_bytes=max_bytes)
 
 
-def classify_kind(model: dict[str, Any]) -> str | None:
+def classify_kind(model: dict[str, Any]) -> ModelKind | None:
     """Map an OpenRouter ``/v1/models`` entry to a bridge ModelEntry kind.
 
     OpenRouter publishes ``architecture.output_modalities`` and

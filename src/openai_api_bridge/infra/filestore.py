@@ -31,6 +31,7 @@ from pathlib import Path
 
 import aiosqlite
 
+from ..kinds import AssetKind
 from ..util.media import asset_extension, sanitize_content_type
 from .db import Database
 
@@ -97,7 +98,7 @@ class FileMetadata:
     storage_path: str  # relative to files_dir
     content_type: str
     byte_size: int
-    kind: str  # "image" | "video"
+    kind: AssetKind
     source_backend: str
     source_model: str
     prompt_excerpt: str | None
@@ -159,7 +160,7 @@ class FileStore:
         data: bytes,
         *,
         content_type: str,
-        kind: str,
+        kind: AssetKind,
         source_backend: str,
         source_model: str,
         prompt_excerpt: str | None = None,

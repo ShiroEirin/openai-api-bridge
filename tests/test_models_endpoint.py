@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from openai_api_bridge.api.models import _entries_for, list_models
 from openai_api_bridge.backends.base import Backend, ModelEntry
 from openai_api_bridge.errors import UpstreamError
+from openai_api_bridge.kinds import AssetKind
 from openai_api_bridge.resources import BridgeResources, install
 
 
@@ -189,7 +190,7 @@ async def test_zero_budget_disables_the_bound() -> None:
 
 
 @pytest.mark.parametrize("kind", ["image", "video"])
-async def test_kind_is_surfaced(kind: str) -> None:
+async def test_kind_is_surfaced(kind: AssetKind) -> None:
     providers: list[tuple[str, Backend]] = [
         ("p", _StaticBackend([ModelEntry(id="m", kind=kind)])),
     ]
