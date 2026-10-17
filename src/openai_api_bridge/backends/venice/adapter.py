@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from collections.abc import Sequence
 from typing import Any
 
@@ -41,14 +40,6 @@ log = logging.getLogger(__name__)
 # Venice, whose edit endpoint only accepts the `-edit` ids.
 _EDIT_SUFFIX = "-edit"
 
-# Without a cooldown every edit during an outage would re-run the catalogue
-# fetch — and because waiters acquire the lock in turn rather than sharing one
-# result, N concurrent edits serialise into N sequential attempts. This is the
-# same shape as fal's *catalogue* cooldown (not its schema introspection):
-# while the window is open the routes stay empty and edits go out unrouted,
-# so the residual cost is a bounded tail after the upstream recovers. The
-# window is configurable via `route_retry_seconds`.
-
 # Venice's image-generation endpoint always returns PNG; the API doesn't
 # include a content-type per image so we hard-code it (matches existing pipe).
 _VENICE_CONTENT_TYPE = "image/png"
@@ -63,9 +54,7 @@ class VeniceBackend(Backend):
         )
         # base id -> its "-edit" counterpart, learned from the catalogue.
         self._edit_routes: dict[str, str] = {}
-        self._routes_lock = asyncio.Lock()
         self._routes_loaded = False
-        self._routes_failed_at: float | None = None
         # A degraded listing (inpaint half missing) is cached too, but only
         # for the short failure window (clamped to the TTL) — long enough that a burst can't queue
         # up behind the lock, short enough that the missing half is retried
@@ -143,9 +132,6 @@ class VeniceBackend(Backend):
             # latching an empty map.
             self._edit_routes = routes
             self._routes_loaded = True
-            self._routes_failed_at = None
-        else:
-            self._routes_failed_at = time.monotonic()
         collapsed = set(routes.values())
 
         entries = [
@@ -173,27 +159,26 @@ class VeniceBackend(Backend):
         ]
         return entries, edit_available
 
-    def _in_route_cooldown(self) -> bool:
-        if self._routes_failed_at is None:
-            return False
-        return time.monotonic() - self._routes_failed_at < self.cfg.route_retry_seconds
-
     async def _edit_target(self, model_slug: str) -> str:
         """The model id Venice's edit endpoint will actually accept.
 
         Loads the catalogue if it hasn't been read yet, so routing doesn't
-        depend on whether some earlier request happened to populate it. A
-        failed read is remembered for a cooldown, so an outage costs one
-        attempt per window rather than one per request.
+        depend on whether some earlier request happened to populate it.
+
+        No retry bookkeeping of its own: ``list_models`` goes through the
+        catalogue cache, which already single-flights the fetch, re-raises a
+        failure without a network call for ``catalog_retry_seconds``, and holds
+        a listing missing its inpaint half for that same window. So an outage
+        costs one fetch per retry window however many edits arrive, and edit
+        routing recovers when the catalogue does. It used to keep a second
+        window, ``route_retry_seconds``, that only ever made routing recover
+        later than the listing it reads.
         """
-        if not self._routes_loaded and not self._in_route_cooldown():
-            async with self._routes_lock:
-                if not self._routes_loaded and not self._in_route_cooldown():
-                    try:
-                        await self.list_models()
-                    except Exception as e:  # fall through to the id as given
-                        self._routes_failed_at = time.monotonic()
-                        log.warning("Venice: could not load model list for edit routing: %s", e)
+        if not self._routes_loaded:
+            try:
+                await self.list_models()
+            except Exception as e:  # fall through to the id as given
+                log.warning("Venice: could not load model list for edit routing: %s", e)
         return self._edit_routes.get(model_slug, model_slug)
 
     async def generate_image(

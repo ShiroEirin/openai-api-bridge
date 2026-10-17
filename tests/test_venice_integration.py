@@ -265,8 +265,8 @@ def test_failed_route_load_is_not_retried_every_request(
     client_with_venice: TestClient,
 ) -> None:
     """Without a cooldown each edit during an outage re-runs the catalogue
-    fetch — and because waiters take the lock in turn rather than sharing one
-    result, concurrent edits serialise into sequential attempts."""
+    fetch. The catalogue cache's own failure window provides it; edit routing
+    keeps no second one."""
     calls = {"n": 0}
 
     def responder(request: httpx.Request) -> httpx.Response:
@@ -332,7 +332,6 @@ async def test_degraded_listing_leaves_routing_unresolved(
         entries = await backend.list_models()
         assert [e.id for e in entries] == ["gpt-image-2"]
         assert backend._routes_loaded is False, "a degraded listing must not latch routing"
-        assert backend._routes_failed_at is not None, "and must arm the retry cooldown"
     finally:
         await backend.aclose()
 
@@ -502,3 +501,46 @@ async def test_incomplete_listing_is_never_held_longer_than_a_healthy_one(
     finally:
         await backend.aclose()
     assert calls["n"] == 4, "the incomplete listing outlived the configured TTL"
+
+
+def test_retired_route_retry_seconds_still_loads_and_says_so(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        cfg = VeniceProviderConfig.model_validate(
+            {
+                "backend": "venice",
+                "id": "vn",
+                "api_token_env": "VENICE_API_TOKEN",
+                "route_retry_seconds": 60,
+            }
+        )
+    assert cfg.id == "vn"
+    assert any("route_retry_seconds is no longer used" in r.message for r in caplog.records)
+
+
+@respx.mock
+async def test_edit_routing_recovers_with_the_catalogue(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Routing used to keep its own 60s window on top of the catalogue's, so it
+    recovered later than the listing it reads. Now it follows the catalogue."""
+    monkeypatch.setenv("VENICE_API_TOKEN", "venice-secret")
+    state = {"up": False}
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        if not state["up"]:
+            return httpx.Response(503, json={"error": "down"})
+        model_type = request.url.params.get("type")
+        ids = ["gpt-image-2"] if model_type == "image" else ["gpt-image-2-edit"]
+        return httpx.Response(200, json={"data": [{"id": i, "type": model_type} for i in ids]})
+
+    respx.get(f"{UPSTREAM}/api/v1/models").mock(side_effect=responder)
+    backend = _venice_backend(catalog_retry_seconds=0.05)
+    try:
+        assert await backend._edit_target("gpt-image-2") == "gpt-image-2"
+        state["up"] = True
+        await asyncio.sleep(0.1)
+        assert await backend._edit_target("gpt-image-2") == "gpt-image-2-edit"
+    finally:
+        await backend.aclose()

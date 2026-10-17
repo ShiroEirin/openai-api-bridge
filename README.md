@@ -143,11 +143,9 @@ a client addresses one model id whichever operation it wants. Edit-only models
 are listed in their own right as `["image-to-image"]`.
 
 Routing needs the catalogue, so the first edit loads it if `/v1/models` hasn't
-already. A failed load is retried after **`route_retry_seconds`** (default 60);
-during that window edits go out unrouted and Venice rejects them, which trades
-a bounded tail after recovery against re-fetching the catalogue on every edit
-while it's down. Setting it to `0` disables the cooldown and reinstates that
-per-request retry. If the `type=inpaint` listing fails, the text-to-image
+already. A failed load is retried after `catalog_retry_seconds`, like any
+catalogue fetch; during that window edits go out unrouted and Venice rejects
+them. If the `type=inpaint` listing fails, the text-to-image
 catalogue is still served — a narrower query failing shouldn't take a healthy
 provider off `/v1/models`.
 

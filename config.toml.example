@@ -75,13 +75,6 @@ api_token_env = "VENICE_API_TOKEN"
 # default_width = 1024
 # default_height = 1024
 #
-# Cooldown before re-reading the model catalogue after a failed attempt to
-# resolve edit routing. While the window is open edits go out unrouted and
-# Venice rejects them, so this trades a bounded tail after recovery against
-# re-fetching the catalogue on every edit during an outage. 0 disables the
-# cooldown — which reinstates exactly that retry storm.
-# route_retry_seconds = 60.0
-#
 # How long a successfully-read model catalogue is reused. /v1/models costs two
 # upstream calls here (the text-to-image and image-to-image listings), and edit
 # routing reads the same catalogue. A listing whose inpaint half failed is

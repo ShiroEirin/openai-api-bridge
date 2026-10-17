@@ -13,6 +13,7 @@ use by the backend adapter — never copied into pydantic state.
 
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from functools import lru_cache
@@ -23,6 +24,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .errors import BridgeError, InvalidRequest
+
+log = logging.getLogger(__name__)
 
 
 class ConfigError(BridgeError):
@@ -290,19 +293,25 @@ class VeniceProviderConfig(_TokenAuthProvider, _CachedCatalogProvider):
     cfg_scale: float = 4.0
     default_width: int = 1024
     default_height: int = 1024
-    # Cooldown before re-reading the model catalogue after a failed attempt to
-    # resolve edit routing. During the window edits go out unrouted (Venice's
-    # edit endpoint only accepts the "-edit" ids, so they fail) — the cost is a
-    # bounded tail after Venice recovers, traded against re-fetching the
-    # catalogue on every single edit while it's down.
-    route_retry_seconds: float = 60.0
     # Catalogue caching is inherited (see _CachedCatalogProvider). Two Venice
     # specifics: a listing costs *two* upstream calls (the text-to-image and
-    # image-to-image listings) and edit routing reads the same catalogue, so an
-    # uncached Venice pays double. And catalog_retry_seconds also bounds how
-    # long an *incomplete* listing is served — for that, whichever of it and
-    # catalog_ttl_seconds is shorter applies — so when that bound exceeds
-    # route_retry_seconds it, not that knob, governs when edit routing recovers.
+    # image-to-image listings), and edit routing reads the same catalogue, so
+    # catalog_retry_seconds is also how soon edit routing is retried after a
+    # failed or incomplete listing.
+
+    @model_validator(mode="before")
+    @classmethod
+    def _warn_retired_route_retry(cls, data: Any) -> Any:
+        # Retired: edit routing now follows the catalogue's own retry window.
+        # Provider blocks ignore unknown keys, so an old config still loads;
+        # this says why the setting stopped doing anything.
+        if isinstance(data, dict) and "route_retry_seconds" in data:
+            log.warning(
+                "Venice provider %r: route_retry_seconds is no longer used and is "
+                "ignored; edit routing retries on catalog_retry_seconds",
+                data.get("id"),
+            )
+        return data
 
 
 class ImageRouterProviderConfig(_TokenAuthProvider, _CachedCatalogProvider):
