@@ -31,13 +31,16 @@ arrived.
 
 - A video job that fails unexpectedly reports only the error's type to clients;
   the full error stays in the bridge's log.
-- A fal model id containing URL syntax (`?`, `#`, `%`, `..`) is refused rather
-  than placed in the path of a request carrying the bridge's fal key.
+- A fal model id is refused unless it is slash-separated segments of letters,
+  digits, `.`, `_` and `-`, rather than placed as-is in the path of a request
+  carrying the bridge's fal key.
 - The bearer token is checked before a request body is read. Image and video
   requests without a valid key were parsed, uploads included, before being refused.
 
 ### Fixed
 
+- A failed or cancelled write of a generated file no longer leaves a file in the
+  cache directory that eviction can never remove.
 - A ComfyUI workflow whose `.meta.json` names nodes as numbers (`6` rather than
   `"6"`) now works. The prompt node failed outright, and image, size and length
   nodes were silently skipped.
