@@ -24,6 +24,7 @@ map exists to protect.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from collections.abc import Callable, Coroutine
 from types import TracebackType
@@ -105,11 +106,7 @@ class TaskScheduler:
             try:
                 await self._sem.acquire()
             except asyncio.CancelledError:
-                # Cancelled while still queued for a permit, so ``coro`` was
-                # never started. Close it, or it is collected un-awaited and
-                # Python warns "coroutine was never awaited" for every job
-                # cancelled before its turn.
-                coro.close()
+                # ``coro`` never started; _cleanup below closes it.
                 log.info("Background task %r cancelled before it started", name)
                 raise
             try:
@@ -134,6 +131,13 @@ class TaskScheduler:
             self._tasks_by_name[name] = task
 
         def _cleanup(t: asyncio.Task[Any]) -> None:
+            # A task cancelled before ``coro`` started — while queued for a
+            # permit, or before the runner took its first step at all, where
+            # no handler inside it can run — leaves ``coro`` un-awaited, and
+            # Python warns "coroutine was never awaited" when it is collected.
+            # The done-callback sees every such exit, so close it here.
+            if inspect.getcoroutinestate(coro) == inspect.CORO_CREATED:
+                coro.close()
             self._tasks.discard(t)
             if name is not None and self._tasks_by_name.get(name) is t:
                 del self._tasks_by_name[name]

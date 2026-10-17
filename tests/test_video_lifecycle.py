@@ -697,3 +697,22 @@ def test_video_requests_past_the_bounds_are_400(
     )
     assert r.status_code == 400
     assert r.json()["error"]["param"] == field
+
+
+@pytest.mark.asyncio
+async def test_scheduler_cancel_before_the_first_step_closes_the_coroutine() -> None:
+    """Cancelled in the same tick it was submitted, the runner never starts,
+    so no handler inside it can close the job's coroutine."""
+    import inspect
+
+    scheduler = TaskScheduler(max_concurrent=1)
+
+    async def never_runs() -> None:
+        raise AssertionError("a cancelled job ran")
+
+    job = never_runs()
+    scheduler.submit(job, name="same-tick")
+    assert scheduler.cancel("same-tick") is True
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert inspect.getcoroutinestate(job) == inspect.CORO_CLOSED
