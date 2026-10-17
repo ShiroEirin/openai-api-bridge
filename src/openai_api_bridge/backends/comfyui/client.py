@@ -241,6 +241,7 @@ class ComfyUIClient:
                 raise GenerationTimeout(
                     f"ComfyUI generation timed out after {timeout_seconds:.0f}s"
                 )
+            entry: dict[str, Any] | None = None
             try:
                 response = await self._client.get(history_url, timeout=per_request_timeout)
                 if response.status_code == 200:
@@ -248,7 +249,7 @@ class ComfyUIClient:
                     # reason to fail the job — the loop retries.
                     history = parse_json(response, "ComfyUI /history")
                     if prompt_id in history:
-                        return dict(history[prompt_id])
+                        entry = dict(history[prompt_id])
             except (
                 httpx2.ReadTimeout,
                 httpx2.ConnectError,
@@ -256,6 +257,11 @@ class ComfyUIClient:
                 UpstreamError,  # includes a non-JSON 200 from a proxy hiccup
             ) as e:
                 log.debug("Transient history poll error (will retry): %s", type(e).__name__)
+            if entry is not None:
+                # Outside the try: a failed run is an UpstreamError too, and
+                # must not be mistaken for a transient poll error and retried.
+                _raise_if_run_failed(entry, prompt_id)
+                return entry
 
             if elapsed - last_queue_check > QUEUE_RECHECK_INTERVAL:
                 last_queue_check = elapsed
@@ -368,3 +374,40 @@ class ComfyUIClient:
             or default_content_type
         )
         return response.content, content_type
+
+
+# Long enough to carry a CUDA OOM or a missing-model message whole; short
+# enough that a custom node dumping a traceback into its message cannot bloat
+# a job row or an error envelope.
+_ERROR_DETAIL_MAX = 300
+
+
+def _raise_if_run_failed(entry: dict[str, Any], prompt_id: str) -> None:
+    """Raise if ComfyUI recorded the run as failed or interrupted.
+
+    ComfyUI writes a history entry when a prompt finishes for *any* reason,
+    so the entry's existence means "done", not "succeeded". A failed run
+    keeps whatever its earlier nodes produced in ``outputs`` — a preview, an
+    intermediate save — which ``retrieve_media`` would otherwise hand back as
+    the result. ``status`` is absent on old ComfyUI builds; trust ``outputs``
+    there as before.
+    """
+    status = entry.get("status")
+    if not isinstance(status, dict) or status.get("status_str") != "error":
+        return
+    detail = "no error message recorded"
+    for message in status.get("messages") or []:
+        if not (isinstance(message, list) and len(message) == 2 and isinstance(message[1], dict)):
+            continue
+        kind, data = message
+        if kind == "execution_interrupted":
+            detail = "execution was interrupted"
+            break
+        if kind == "execution_error":
+            node = data.get("node_type") or data.get("node_id") or "unknown node"
+            text = str(data.get("exception_message") or data.get("exception_type") or "").strip()
+            if len(text) > _ERROR_DETAIL_MAX:
+                text = text[:_ERROR_DETAIL_MAX] + "…"
+            detail = f"{node} failed: {text}" if text else f"{node} failed"
+            break
+    raise UpstreamError(f"ComfyUI run {prompt_id} failed: {detail}")

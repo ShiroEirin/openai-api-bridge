@@ -15,6 +15,11 @@ arrived.
 - The bearer token is checked before a request body is read. Image and video
   requests without a valid key were parsed, uploads included, before being refused.
 
+### Fixed
+
+- A ComfyUI workflow that errors or is interrupted now fails the request with
+  ComfyUI's error, instead of returning whatever its earlier nodes had saved.
+
 ## v0.7.0
 
 ### Added

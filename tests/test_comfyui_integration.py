@@ -592,3 +592,82 @@ def test_a_ratio_sent_to_a_workflow_that_offers_none_is_ignored(
     )
     assert r.status_code == 200, r.text
     assert "aspect_ratio" not in r.json()["data"][0]
+
+
+def _failed_history(prompt_id: str, messages: list[object]) -> dict[str, object]:
+    # A failed run keeps what its earlier nodes saved; that must not be
+    # handed back as the result.
+    return {
+        prompt_id: {
+            "outputs": {
+                "2": {"images": [{"filename": "partial.png", "subfolder": "", "type": "output"}]}
+            },
+            "status": {"status_str": "error", "completed": False, "messages": messages},
+        }
+    }
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("messages", "expected"),
+    [
+        (
+            [
+                ["execution_start", {"prompt_id": "p"}],
+                [
+                    "execution_error",
+                    {
+                        "node_id": "3",
+                        "node_type": "KSampler",
+                        "exception_message": "CUDA out of memory",
+                    },
+                ],
+            ],
+            "KSampler failed: CUDA out of memory",
+        ),
+        ([["execution_interrupted", {"node_id": "3"}]], "execution was interrupted"),
+        ([], "no error message recorded"),
+    ],
+)
+def test_a_failed_run_is_an_error_not_its_partial_outputs(
+    client_with_comfyui: TestClient, messages: list[object], expected: str
+) -> None:
+    headers = {"Authorization": "Bearer test-bridge-api-key"}
+    respx.post(f"{COMFY}/prompt").mock(return_value=httpx.Response(200, json={"prompt_id": "p"}))
+    history = respx.get(f"{COMFY}/history/p").mock(
+        return_value=httpx.Response(200, json=_failed_history("p", messages))
+    )
+    view = respx.get(f"{COMFY}/view").mock(
+        return_value=httpx.Response(200, content=PNG_MAGIC, headers={"content-type": "image/png"})
+    )
+
+    r = client_with_comfyui.post(
+        "/v1/images/generations",
+        headers=headers,
+        json={"model": "comfyui/tiny-t2i", "prompt": "x"},
+    )
+
+    assert r.status_code == 502, r.text
+    assert expected in r.json()["error"]["message"]
+    assert history.call_count == 1  # failed once, not retried as a poll blip
+    assert not view.called
+
+
+@respx.mock
+def test_a_successful_status_still_returns_the_output(client_with_comfyui: TestClient) -> None:
+    headers = {"Authorization": "Bearer test-bridge-api-key"}
+    respx.post(f"{COMFY}/prompt").mock(return_value=httpx.Response(200, json={"prompt_id": "p"}))
+    entry = _failed_history("p", [])["p"]
+    assert isinstance(entry, dict)
+    entry["status"] = {"status_str": "success", "completed": True, "messages": []}
+    respx.get(f"{COMFY}/history/p").mock(return_value=httpx.Response(200, json={"p": entry}))
+    respx.get(f"{COMFY}/view").mock(
+        return_value=httpx.Response(200, content=PNG_MAGIC, headers={"content-type": "image/png"})
+    )
+
+    r = client_with_comfyui.post(
+        "/v1/images/generations",
+        headers=headers,
+        json={"model": "comfyui/tiny-t2i", "prompt": "x"},
+    )
+    assert r.status_code == 200, r.text
