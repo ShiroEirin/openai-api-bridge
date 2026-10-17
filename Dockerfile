@@ -2,7 +2,7 @@
 #
 # Multi-stage build using uv. Builder installs deps + the package into a
 # venv; runtime copies the venv into a fresh image. Both stages run on
-# python:3.12-alpine for a ~100MB savings over python:3.12-slim — every
+# python:3.14-alpine for a ~100MB savings over python:3.14-slim — every
 # native dep in this project (pydantic_core, uvloop, httptools,
 # watchfiles) ships a musllinux wheel, so `uv sync` pulls pre-built
 # wheels and never has to compile from source.
