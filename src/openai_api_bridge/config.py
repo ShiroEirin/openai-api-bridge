@@ -119,8 +119,8 @@ class BridgeSettings(BaseSettings):
     # exceeds this on the first request after boot and appears on the second.
     models_timeout_seconds: float = Field(default=5.0, alias="MODELS_TIMEOUT_SECONDS")
     # Whether to serve the interactive API docs (`/docs`, `/redoc`,
-    # `/openapi.json`). Off by default: FastAPI mounts them *outside* the
-    # bearer-token dependency every real route carries, so they hand the
+    # `/openapi.json`). Off by default: when on they are exempt from the
+    # bearer-token check every other route goes through, so they hand the
     # bridge's complete API surface — and a positive identification of what is
     # listening — to anyone who can reach the port, without a credential. They
     # touch no backend, which is why they were left on for v1; that makes them

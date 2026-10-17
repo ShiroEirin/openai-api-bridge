@@ -33,6 +33,13 @@ class BridgeError(Exception):
 
 
 class Unauthorized(BridgeError):
+    """The 401 for a missing or wrong bearer token.
+
+    Like ``RequestTooLarge``, never raised: ``ApiKeyMiddleware`` renders it
+    from outside the middleware stack, where ``bridge_error_handler`` cannot
+    reach. Declared here so its envelope sits with every other error's.
+    """
+
     status_code = 401
     error_type = "invalid_request_error"
     code = "invalid_api_key"

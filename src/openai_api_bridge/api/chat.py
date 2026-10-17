@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
 
-from ..auth import require_api_key
 from ..backends.base import Backend
 from ..errors import UpstreamError
 from ._passthrough import prepare
@@ -18,7 +17,6 @@ router = APIRouter()
 
 @router.post(
     "/v1/chat/completions",
-    dependencies=[Depends(require_api_key)],
     # Disable FastAPI's auto-derived response model: this endpoint returns
     # either a plain Response (sync) or a StreamingResponse (SSE), and the
     # union confuses Pydantic's field-builder.

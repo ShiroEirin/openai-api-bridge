@@ -6,9 +6,8 @@ import logging
 import secrets
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Form, Header, Request, Response, UploadFile
+from fastapi import APIRouter, File, Form, Header, Request, Response, UploadFile
 
-from ..auth import require_api_key
 from ..config import parse_model_id
 from ..errors import (
     InvalidRequest,
@@ -47,7 +46,7 @@ def _video_to_dict(job: VideoJob) -> dict[str, Any]:
     }
 
 
-@router.post("/v1/videos", dependencies=[Depends(require_api_key)])
+@router.post("/v1/videos")
 async def videos_create(
     request: Request,
     model: Annotated[str, Form()],
@@ -108,7 +107,7 @@ async def videos_create(
     return _video_to_dict(job)
 
 
-@router.get("/v1/videos/{video_id}", dependencies=[Depends(require_api_key)])
+@router.get("/v1/videos/{video_id}")
 async def videos_get(video_id: str, request: Request) -> dict[str, Any]:
     job = await resources(request).jobstore.get(video_id)
     if job is None:
@@ -116,7 +115,7 @@ async def videos_get(video_id: str, request: Request) -> dict[str, Any]:
     return _video_to_dict(job)
 
 
-@router.delete("/v1/videos/{video_id}", dependencies=[Depends(require_api_key)])
+@router.delete("/v1/videos/{video_id}")
 async def videos_cancel(video_id: str, request: Request) -> dict[str, Any]:
     """Cancel a queued or in-progress video job.
 
@@ -148,7 +147,7 @@ async def videos_cancel(video_id: str, request: Request) -> dict[str, Any]:
     return _video_to_dict(refreshed)
 
 
-@router.get("/v1/videos/{video_id}/content", dependencies=[Depends(require_api_key)])
+@router.get("/v1/videos/{video_id}/content")
 async def videos_get_content(
     video_id: str,
     request: Request,

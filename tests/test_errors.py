@@ -118,7 +118,7 @@ def test_an_unexpected_exception_gets_the_openai_envelope_without_its_details(
     """OpenAI SDKs parse ``error`` out of every non-2xx; a bare 500 page breaks
     them. And the exception text is for the log, never the wire."""
     with caplog.at_level(logging.ERROR):
-        r = raising_client.get("/v1/boom")
+        r = raising_client.get("/v1/boom", headers={"Authorization": "Bearer test-bridge-api-key"})
 
     assert r.status_code == 500
     assert r.json() == error_payload(

@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, Header, Request, Response
 
-from ..auth import require_api_key
 from ..errors import JobNotFound
 from ..resources import resources
 from ._assets import asset_response
@@ -20,7 +19,7 @@ from ._assets import asset_response
 router = APIRouter()
 
 
-@router.get("/v1/files/{file_id}/content", dependencies=[Depends(require_api_key)])
+@router.get("/v1/files/{file_id}/content")
 async def get_file_content(
     file_id: str,
     request: Request,

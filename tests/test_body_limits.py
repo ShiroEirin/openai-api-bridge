@@ -240,14 +240,16 @@ def test_body_under_the_cap_passes_through(
     assert r.json()["error"]["code"] == "provider_not_found"
 
 
-def test_limit_runs_before_auth(small_limit_client: TestClient) -> None:
-    """Outermost middleware, so an oversized body is refused without a
-    credential — the bytes are the cost, and reading them to find out the
-    caller was unauthorised defeats the point."""
-    r = small_limit_client.post(
-        "/v1/chat/completions",
-        json={"model": "ghost/x", "messages": [{"role": "user", "content": "x" * _LIMIT_BYTES}]},
-    )
+def test_auth_runs_before_the_limit(
+    small_limit_client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    """The auth gate wraps the limit, so neither reads a byte of an
+    unauthenticated body, and a caller without the key learns nothing about
+    the cap. With the key, the limit still applies."""
+    body = {"model": "ghost/x", "messages": [{"role": "user", "content": "x" * _LIMIT_BYTES}]}
+    r = small_limit_client.post("/v1/chat/completions", json=body)
+    assert r.status_code == 401
+    r = small_limit_client.post("/v1/chat/completions", json=body, headers=auth_headers)
     assert r.status_code == 413
 
 

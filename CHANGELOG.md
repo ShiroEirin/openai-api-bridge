@@ -10,6 +10,11 @@ arrived.
 
 ## Unreleased
 
+### Security
+
+- The bearer token is checked before a request body is read. Image and video
+  requests without a valid key were parsed, uploads included, before being refused.
+
 ## v0.7.0
 
 ### Added

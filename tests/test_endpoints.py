@@ -34,16 +34,75 @@ def test_auth_rejects_wrong_key(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
-def test_docs_routes_absent_by_default(client: TestClient, path: str) -> None:
-    """FastAPI mounts these outside the auth dependency, so they answered
-    unauthenticated and published the whole API surface to anyone who could
-    reach the port. Off unless BRIDGE_ENABLE_DOCS says otherwise."""
-    assert client.get(path).status_code == 404
+def test_docs_routes_absent_by_default(
+    client: TestClient, auth_headers: dict[str, str], path: str
+) -> None:
+    """FastAPI mounts these outside any route dependency, so they once
+    answered unauthenticated and published the whole API surface to anyone
+    who could reach the port. Off unless BRIDGE_ENABLE_DOCS says otherwise,
+    and behind the key like everything else when off."""
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers=auth_headers).status_code == 404
 
 
 @pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])
 def test_docs_routes_served_when_opted_in(docs_client: TestClient, path: str) -> None:
     assert docs_client.get(path).status_code == 200
+
+
+def test_every_route_requires_the_key(client: TestClient) -> None:
+    """The middleware is the only auth gate, so a route added later is
+    covered without anyone remembering to opt it in."""
+    from fastapi.routing import APIRoute
+
+    from openai_api_bridge.api import chat, embeddings, files, images, models, videos
+
+    routers = (chat, embeddings, files, images, models, videos)
+    routes = [r for m in routers for r in m.router.routes if isinstance(r, APIRoute)]
+    assert len(routes) >= 10
+    for route in routes:
+        path = route.path.replace("{video_id}", "video_x").replace("{file_id}", "file_x")
+        for method in route.methods or ():
+            r = client.request(method, path)
+            assert r.status_code == 401, (method, path)
+            assert r.json()["error"]["code"] == "invalid_api_key"
+            assert r.headers["www-authenticate"] == "Bearer"
+
+
+@pytest.mark.parametrize(
+    ("path", "kwargs"),
+    [
+        ("/v1/images/generations", {"json": {"model": "x/y", "prompt": "p"}}),
+        (
+            "/v1/images/edits",
+            {"data": {"model": "x/y", "prompt": "p"}, "files": {"image": ("a.png", b"x")}},
+        ),
+        (
+            "/v1/videos",
+            {
+                "data": {"model": "x/y", "prompt": "p"},
+                "files": {"input_reference": ("a.png", b"x")},
+            },
+        ),
+        ("/v1/chat/completions", {"json": {"model": "x/y", "messages": []}}),
+    ],
+)
+def test_unauthenticated_body_is_never_read(
+    client: TestClient, path: str, kwargs: dict[str, object]
+) -> None:
+    """FastAPI parses body parameters before it solves dependencies, so when
+    auth was a dependency these routes decoded JSON and multipart uploads for
+    callers with no key. The gate now runs before the body is pulled."""
+    from unittest.mock import patch
+
+    from starlette.requests import Request
+
+    with (
+        patch.object(Request, "body", side_effect=AssertionError("body read")),
+        patch.object(Request, "form", side_effect=AssertionError("form read")),
+    ):
+        r = client.post(path, **kwargs)  # type: ignore[arg-type]
+    assert r.status_code == 401
 
 
 def test_models_lists_empty(client: TestClient, auth_headers: dict[str, str]) -> None:

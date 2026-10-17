@@ -220,10 +220,11 @@ generations from another's.
 
 What the bridge does enforce:
 
-- Every route requires the bearer token, compared in constant time. The
-  interactive docs are off by default (`BRIDGE_ENABLE_DOCS`) because FastAPI
-  mounts them outside that check, and the process refuses to start on an
-  empty, trivial, or placeholder key.
+- Every route requires the bearer token, compared in constant time and
+  checked before any of the request body is read. The interactive docs are
+  off by default (`BRIDGE_ENABLE_DOCS`) because they are exempt from that
+  check when on, and the process refuses to start on an empty, trivial, or
+  placeholder key.
 - Request bodies are capped (`BRIDGE_MAX_REQUEST_MB`) before being buffered,
   and downloaded assets are capped (`max_asset_mb`) as they stream.
 - Stored assets are served `nosniff` + `Content-Disposition: attachment`, with
@@ -356,7 +357,7 @@ sensibly:
 |---|---|---|
 | `BRIDGE_API_KEY` | — (required) | Bearer token clients must send. Must be at least 16 characters and not the `.env.example` placeholder — the bridge refuses to start otherwise, because an empty value makes `Authorization: Bearer ` a valid credential for every caller that can reach the port. Generate one with `openssl rand -hex 24` |
 | `BRIDGE_HOST` / `BRIDGE_PORT` | `0.0.0.0` / `8080` | Bind address |
-| `BRIDGE_ENABLE_DOCS` | `false` | Serve the interactive API docs (`/docs`, `/redoc`, `/openapi.json`). FastAPI mounts these outside the bearer-token dependency, so they answer *unauthenticated* — off by default; turn on only on a trusted network |
+| `BRIDGE_ENABLE_DOCS` | `false` | Serve the interactive API docs (`/docs`, `/redoc`, `/openapi.json`). When on, they answer *unauthenticated* — every other route requires the bearer token — so off by default; turn on only on a trusted network |
 | `BRIDGE_MAX_REQUEST_MB` | `100` | Ceiling on an inbound request body; over it the bridge answers `413` before buffering. The bridge reads bodies whole on a single worker, so one oversized request is felt by every other client. `0` disables the check |
 | `BRIDGE_PUBLIC_BASE_URL` | empty | Public origin used to build asset URLs in responses (e.g. `https://bridge.example.com`). Empty → relative URLs, fine when clients reach the bridge at the same host they requested from |
 | `BRIDGE_CONFIG_PATH` | `/etc/openai-api-bridge/config.toml` | Provider config location |

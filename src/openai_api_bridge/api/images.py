@@ -6,9 +6,8 @@ import base64
 import time
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, File, Form, Request, UploadFile
 
-from ..auth import require_api_key
 from ..backends.base import GeneratedAsset, InputImage
 from ..config import BridgeSettings, parse_model_id
 from ..errors import InvalidRequest
@@ -61,7 +60,7 @@ async def _render_assets(
     return out
 
 
-@router.post("/v1/images/generations", dependencies=[Depends(require_api_key)])
+@router.post("/v1/images/generations")
 async def images_generations(req: ImagesGenerationRequest, request: Request) -> dict[str, Any]:
     provider_id, model_slug = parse_model_id(req.model)
     res = resources(request)
@@ -87,7 +86,7 @@ async def images_generations(req: ImagesGenerationRequest, request: Request) -> 
     return {"created": int(time.time()), "data": data}
 
 
-@router.post("/v1/images/edits", dependencies=[Depends(require_api_key)])
+@router.post("/v1/images/edits")
 async def images_edits(
     request: Request,
     prompt: Annotated[str, Form()],

@@ -25,7 +25,7 @@ from .api import images as images_api
 from .api import models as models_api
 from .api import videos as videos_api
 from .api._limits import BodySizeLimitMiddleware
-from .auth import require_api_key  # noqa: F401  (imported here to keep DI graph alive)
+from .auth import ApiKeyMiddleware
 from .config import (
     BridgeSettings,
     get_settings,
@@ -187,11 +187,21 @@ def create_app() -> FastAPI:
     # ``Exception`` and narrowing again at runtime, which loses the precision
     # where it's actually useful. Ignore the two narrow registrations instead;
     # the ``Exception`` one below already matches.
-    # Outermost, so an oversized body is refused before Starlette's multipart
-    # parser spools it to disk or a route reads it into memory. It renders its
-    # own 413 rather than raising, since exception handlers sit inside the
-    # middleware stack and would never see it.
+    # Just inside the auth gate, so an oversized body is refused before
+    # Starlette's multipart parser spools it to disk or a route reads it into
+    # memory. It renders its own 413 rather than raising, since exception
+    # handlers sit inside the middleware stack and would never see it.
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_bytes)
+    # Added last, so it wraps the size limit: an unauthenticated caller is
+    # refused before the bridge reads, spools or measures a byte of its body,
+    # and learns nothing about the cap. See ApiKeyMiddleware for why this is
+    # not a route dependency.
+    docs_paths = ("/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json")
+    app.add_middleware(
+        ApiKeyMiddleware,
+        api_key=settings.api_key,
+        exempt_paths=docs_paths if docs_enabled else (),
+    )
 
     app.add_exception_handler(BridgeError, bridge_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, _validation_handler)  # type: ignore[arg-type]

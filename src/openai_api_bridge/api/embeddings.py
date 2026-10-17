@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Request, Response
 
-from ..auth import require_api_key
 from ..backends.base import Backend
 from ._passthrough import prepare
 
@@ -18,7 +17,7 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/v1/embeddings", dependencies=[Depends(require_api_key)])
+@router.post("/v1/embeddings")
 async def embeddings(request: Request) -> Response:
     resolved = await prepare(
         request,

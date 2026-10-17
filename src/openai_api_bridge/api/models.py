@@ -7,9 +7,8 @@ import logging
 import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 
-from ..auth import require_api_key
 from ..backends.base import Backend, ModelEntry
 from ..errors import BridgeError
 from ..infra.tasks import SingleFlight
@@ -101,7 +100,7 @@ async def _entries_within(provider_id: str, backend: Backend, budget: float) -> 
         return []
 
 
-@router.get("/v1/models", dependencies=[Depends(require_api_key)])
+@router.get("/v1/models")
 async def list_models(request: Request) -> dict[str, Any]:
     res = resources(request)
     now = int(time.time())
