@@ -18,7 +18,7 @@ from typing import Any
 import httpx2
 
 from ...errors import GenerationTimeout, UpstreamAuthError, UpstreamError, WorkflowInvalid
-from ...util.http import parse_json
+from ...util.http import parse_json, upstream_client
 from ...util.media import image_extension
 
 log = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ class ComfyUIClient:
         # can be slow to accept while loading a model, and it left any future
         # call site that forgets an explicit timeout on a different budget
         # from the rest of the bridge.
-        self._client = httpx2.AsyncClient(
+        self._client = upstream_client(
             timeout=httpx2.Timeout(request_timeout_seconds, connect=10.0),
         )
 

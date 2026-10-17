@@ -35,7 +35,12 @@ from typing import Any
 import httpx2
 
 from ...errors import UpstreamError
-from ...util.http import fetch_asset_with_retry, parse_json, raise_for_upstream_status
+from ...util.http import (
+    fetch_asset_with_retry,
+    parse_json,
+    raise_for_upstream_status,
+    upstream_client,
+)
 from ...util.media import image_filename
 from ..base import InputImage
 
@@ -58,7 +63,7 @@ class ImageRouterClient:
         self.base_url = base_url.rstrip("/")
         self.max_asset_bytes = max_asset_bytes
         self._auth_headers = {"Authorization": f"Bearer {api_token}"}
-        self._client = httpx2.AsyncClient(
+        self._client = upstream_client(
             headers=self._auth_headers,
             timeout=httpx2.Timeout(_DEFAULT_GENERATION_READ_TIMEOUT_S, connect=10.0),
         )

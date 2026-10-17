@@ -25,7 +25,7 @@ from typing import Any
 import httpx2
 
 from ...errors import UpstreamError
-from ...util.http import parse_json, raise_for_upstream_status
+from ...util.http import parse_json, raise_for_upstream_status, upstream_client
 from ...util.media import image_filename
 
 log = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ class VeniceClient:
     def __init__(self, *, base_url: str, api_token: str) -> None:
         self.base_url = base_url.rstrip("/")
         self._token = api_token
-        self._client = httpx2.AsyncClient(
+        self._client = upstream_client(
             headers={"Authorization": f"Bearer {api_token}"},
             timeout=httpx2.Timeout(60.0, connect=10.0),
         )

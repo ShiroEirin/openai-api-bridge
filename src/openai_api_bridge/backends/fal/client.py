@@ -28,7 +28,12 @@ from typing import Any
 import httpx2
 
 from ...errors import RateLimited, UnsupportedOperation, UpstreamAuthError, UpstreamError
-from ...util.http import fetch_asset_with_retry, parse_json, raise_for_upstream_status
+from ...util.http import (
+    fetch_asset_with_retry,
+    parse_json,
+    raise_for_upstream_status,
+    upstream_client,
+)
 
 log = logging.getLogger(__name__)
 
@@ -113,7 +118,7 @@ class FalClient:
             self._inference_headers["X-Fal-Object-Lifecycle-Preference"] = json.dumps(
                 {"expiration_duration_seconds": output_expiration_seconds}
             )
-        self._client = httpx2.AsyncClient(
+        self._client = upstream_client(
             headers=self._auth_headers,
             timeout=httpx2.Timeout(
                 request_timeout_seconds or _DEFAULT_GENERATION_READ_TIMEOUT_S,

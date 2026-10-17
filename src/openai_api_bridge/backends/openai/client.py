@@ -30,7 +30,7 @@ from typing import Any
 import httpx2
 
 from ...errors import UpstreamError
-from ...util.http import parse_json, raise_for_upstream_status
+from ...util.http import parse_json, raise_for_upstream_status, upstream_client
 from ...util.json_body import JsonBody
 
 log = logging.getLogger(__name__)
@@ -78,11 +78,11 @@ class OpenAIClient:
             headers["Authorization"] = f"Bearer {api_token}"
         # Use a generous default timeout for non-streaming calls; streaming
         # opens its own client with no read timeout.
-        self._client = httpx2.AsyncClient(
+        self._client = upstream_client(
             headers=headers,
             timeout=httpx2.Timeout(request_timeout_seconds, connect=10.0),
         )
-        self._streaming_client = httpx2.AsyncClient(
+        self._streaming_client = upstream_client(
             headers=headers,
             # Streaming chat completions can sit idle between tokens — disable
             # the read timeout so a slow token stream isn't mistaken for a

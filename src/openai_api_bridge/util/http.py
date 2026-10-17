@@ -49,6 +49,30 @@ _ASSET_LIMITS = httpx2.Limits(
 )
 
 
+# The same problem for the backends' own API clients, where it costs more:
+# chat turns, image requests and catalogue refreshes all arrive further apart
+# than 5s, so at the default nearly every upstream request opened a fresh
+# connection and paid TCP + TLS (plus the CA-store re-read above) on the
+# caller's critical path. 60s rather than the asset client's 300s because
+# these hosts are API servers, which close idle connections themselves —
+# nginx and aiohttp (ComfyUI) both default to 75s — and a connection the
+# server has already dropped fails the request that tries to reuse it.
+# Staying under the common server timeout means the client retires it first.
+_UPSTREAM_LIMITS = httpx2.Limits(keepalive_expiry=60.0)
+
+
+def upstream_client(
+    *, timeout: httpx2.Timeout, headers: dict[str, str] | None = None
+) -> httpx2.AsyncClient:
+    """An httpx2 client for a backend's own API, with the bridge's pool settings.
+
+    Every backend builds its clients here so the keepalive above applies to
+    all of them; constructing ``httpx2.AsyncClient`` directly in a backend
+    silently reverts to the 5s default.
+    """
+    return httpx2.AsyncClient(headers=headers, timeout=timeout, limits=_UPSTREAM_LIMITS)
+
+
 def _asset_fetch_client() -> httpx2.AsyncClient:
     """The shared client used to download generated assets.
 
