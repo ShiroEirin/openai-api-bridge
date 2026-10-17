@@ -31,6 +31,7 @@ import httpx2
 
 from ...errors import UpstreamError
 from ...util.http import parse_json, raise_for_upstream_status
+from ...util.json_body import JsonBody
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +56,10 @@ _UTF_BOMS = (
 # comes from — it sits above every chat completion and every proxy error page,
 # and below the embedding batches the byte path exists to keep cheap.
 _MAX_VALIDATED_BODY = 256 * 1024
+
+# Request bodies go out as pre-encoded bytes (JsonBody.raw), so the content
+# type that ``json=`` used to set is set by hand.
+_JSON = {"content-type": "application/json"}
 
 
 class OpenAIClient:
@@ -110,7 +115,7 @@ class OpenAIClient:
         body = parse_json(response, "Upstream /v1/models")
         return list(body.get("data", []))
 
-    async def chat_completion(self, body: dict[str, Any]) -> bytes:
+    async def chat_completion(self, body: JsonBody) -> bytes:
         """Non-streaming chat completion. Returns the raw JSON response body.
 
         Bytes rather than a parsed dict because nothing on the passthrough
@@ -120,12 +125,14 @@ class OpenAIClient:
         translation) parses it itself.
         """
         try:
-            response = await self._client.post(f"{self.base_url}/v1/chat/completions", json=body)
+            response = await self._client.post(
+                f"{self.base_url}/v1/chat/completions", content=body.raw, headers=_JSON
+            )
         except httpx2.HTTPError as e:
             raise UpstreamError(f"Upstream /v1/chat/completions failed: {e}") from e
         return self._raw_body(response, "/v1/chat/completions")
 
-    async def chat_completion_stream(self, body: dict[str, Any]) -> AsyncIterator[bytes]:
+    async def chat_completion_stream(self, body: JsonBody) -> AsyncIterator[bytes]:
         """Streaming chat completion. Yields raw SSE byte chunks until the
         upstream signals ``data: [DONE]``.
 
@@ -135,11 +142,16 @@ class OpenAIClient:
         upstream features work without code changes here.
         """
         # Force stream=True; some upstreams will refuse the stream context
-        # if the body says otherwise.
-        body = {**body, "stream": True}
+        # if the body says otherwise. Only rewritten when it isn't already a
+        # literal true, which is what every real client sends.
+        if body.fields.get("stream") is not True:
+            body = body.replace_top_level({"stream": True})
         try:
             req = self._streaming_client.build_request(
-                "POST", f"{self.base_url}/v1/chat/completions", json=body
+                "POST",
+                f"{self.base_url}/v1/chat/completions",
+                content=body.raw,
+                headers=_JSON,
             )
             response = await self._streaming_client.send(req, stream=True)
         except httpx2.HTTPError as e:
@@ -161,7 +173,7 @@ class OpenAIClient:
 
         return iterator()
 
-    async def create_embedding(self, body: dict[str, Any]) -> bytes:
+    async def create_embedding(self, body: JsonBody) -> bytes:
         """Embeddings passthrough. Returns the raw JSON response body.
 
         The same argument as ``chat_completion``, but this is where it bites:
@@ -171,7 +183,9 @@ class OpenAIClient:
         result.
         """
         try:
-            response = await self._client.post(f"{self.base_url}/v1/embeddings", json=body)
+            response = await self._client.post(
+                f"{self.base_url}/v1/embeddings", content=body.raw, headers=_JSON
+            )
         except httpx2.HTTPError as e:
             raise UpstreamError(f"Upstream /v1/embeddings failed: {e}") from e
         return self._raw_body(response, "/v1/embeddings")

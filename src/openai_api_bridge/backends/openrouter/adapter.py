@@ -26,6 +26,7 @@ from ...config import OpenRouterProviderConfig
 from ...errors import UpstreamError
 from ...util.cache import AsyncTTLCache
 from ...util.concurrency import run_all
+from ...util.json_body import JsonBody
 from ..base import (
     KIND_OUTPUT_MODALITY,
     Backend,
@@ -116,7 +117,7 @@ class OpenRouterBackend(Backend):
 
     async def chat_completion(
         self,
-        body: dict[str, Any],
+        body: JsonBody,
         *,
         stream: bool,
     ) -> bytes | AsyncIterator[bytes]:
@@ -124,7 +125,7 @@ class OpenRouterBackend(Backend):
             return await self._client.chat_completion_stream(body)
         return await self._client.chat_completion(body)
 
-    async def create_embedding(self, body: dict[str, Any]) -> bytes:
+    async def create_embedding(self, body: JsonBody) -> bytes:
         return await self._client.create_embedding(body)
 
     # --- image generation (translated via chat completions) --------------
@@ -198,7 +199,7 @@ class OpenRouterBackend(Backend):
         # generation rides on chat completions here, and the URLs live in a
         # non-standard `message.images` array we have to read. The passthrough
         # endpoints forward the same bytes unexamined.
-        raw = await self._client.chat_completion(body)
+        raw = await self._client.chat_completion(JsonBody.from_fields(body))
         try:
             response = json.loads(raw)
         except ValueError as e:

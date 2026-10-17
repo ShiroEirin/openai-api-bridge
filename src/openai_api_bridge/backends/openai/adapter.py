@@ -17,6 +17,7 @@ from typing import Any
 
 from ...config import OpenAIPassthroughProviderConfig
 from ...util.cache import AsyncTTLCache
+from ...util.json_body import JsonBody
 from ..base import Backend, ModelEntry
 from .client import OpenAIClient
 
@@ -127,7 +128,7 @@ class OpenAIPassthroughBackend(Backend):
 
     async def chat_completion(
         self,
-        body: dict[str, Any],
+        body: JsonBody,
         *,
         stream: bool,
     ) -> bytes | AsyncIterator[bytes]:
@@ -135,5 +136,5 @@ class OpenAIPassthroughBackend(Backend):
             return await self.client.chat_completion_stream(body)
         return await self.client.chat_completion(body)
 
-    async def create_embedding(self, body: dict[str, Any]) -> bytes:
+    async def create_embedding(self, body: JsonBody) -> bytes:
         return await self.client.create_embedding(body)

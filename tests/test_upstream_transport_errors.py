@@ -38,6 +38,7 @@ from openai_api_bridge.backends.openai.client import OpenAIClient
 from openai_api_bridge.backends.venice.client import VeniceClient
 from openai_api_bridge.config import reset_caches_for_tests
 from openai_api_bridge.errors import UpstreamError
+from openai_api_bridge.util.json_body import JsonBody
 
 UPSTREAM = "http://upstream.test"
 
@@ -92,17 +93,17 @@ CASES: list[tuple[str, Callable[[], Any], Callable[[Any], Awaitable[Any]]]] = [
     (
         "openai.chat_completion",
         _openai,
-        lambda c: c.chat_completion({"model": "m", "messages": []}),
+        lambda c: c.chat_completion(JsonBody.from_fields({"model": "m", "messages": []})),
     ),
     (
         "openai.chat_completion_stream",
         _openai,
-        lambda c: c.chat_completion_stream({"model": "m", "messages": []}),
+        lambda c: c.chat_completion_stream(JsonBody.from_fields({"model": "m", "messages": []})),
     ),
     (
         "openai.create_embedding",
         _openai,
-        lambda c: c.create_embedding({"model": "m", "input": "x"}),
+        lambda c: c.create_embedding(JsonBody.from_fields({"model": "m", "input": "x"})),
     ),
     ("venice.list_image_models", _venice, lambda c: c.list_image_models()),
     (

@@ -36,7 +36,7 @@ async def chat_completions(request: Request) -> Response | StreamingResponse:
         base_method=Backend.chat_completion,
         operation="chat completions",
     )
-    stream_requested = bool(resolved.body.get("stream"))
+    stream_requested = bool(resolved.body.fields.get("stream"))
 
     if stream_requested:
         sse_iterator = await resolved.backend.chat_completion(resolved.body, stream=True)

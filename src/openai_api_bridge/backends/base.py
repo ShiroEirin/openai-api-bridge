@@ -11,10 +11,10 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass, replace
-from typing import Any
 
 from ..errors import UnsupportedOperation
 from ..util.aspect import AspectRatio
+from ..util.json_body import JsonBody
 
 # Async callback invoked once when the upstream backend assigns a job/prompt id.
 # The bridge persists this so video jobs can be cross-referenced for debugging.
@@ -390,7 +390,7 @@ class Backend(ABC):
 
     async def chat_completion(
         self,
-        body: dict[str, Any],
+        body: JsonBody,
         *,
         stream: bool,
     ) -> bytes | AsyncIterator[bytes]:
@@ -413,7 +413,7 @@ class Backend(ABC):
 
     async def create_embedding(
         self,
-        body: dict[str, Any],
+        body: JsonBody,
     ) -> bytes:
         """Forward an OpenAI-shaped embeddings request. Default: not supported.
 

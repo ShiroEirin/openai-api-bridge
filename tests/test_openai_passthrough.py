@@ -14,6 +14,7 @@ import json
 import textwrap
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -573,3 +574,55 @@ def test_a_body_past_the_validation_gate_skips_the_parse(
 
     assert r.status_code == 200
     assert r.content == oversized
+
+
+@respx.mock
+def test_request_body_is_forwarded_as_the_callers_bytes(
+    client_with_openai: TestClient,
+) -> None:
+    """Only the model id is rewritten; everything else reaches the upstream
+    exactly as the caller encoded it, rather than being re-serialised on the
+    event loop."""
+    captured: dict[str, Any] = {}
+
+    def _capture(request: httpx.Request) -> httpx.Response:
+        captured["content"] = request.content
+        captured["type"] = request.headers["content-type"]
+        return httpx.Response(200, json={"object": "list", "data": []})
+
+    respx.post(f"{UPSTREAM}/v1/embeddings").mock(side_effect=_capture)
+    sent = b'{ "input" : ["caf\xc3\xa9", "\\u00e9"],\n  "model": "llama/embed" , "dimensions":8 }'
+
+    r = client_with_openai.post(
+        "/v1/embeddings",
+        headers={**HEADERS, "content-type": "application/json"},
+        content=sent,
+    )
+
+    assert r.status_code == 200
+    assert captured["content"] == sent.replace(b'"llama/embed"', b'"embed"')
+    assert captured["type"] == "application/json"
+
+
+@respx.mock
+def test_a_non_literal_stream_flag_is_forwarded_as_true(
+    client_with_openai: TestClient,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _capture(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200, content=b"data: [DONE]\n\n", headers={"content-type": "text/event-stream"}
+        )
+
+    respx.post(f"{UPSTREAM}/v1/chat/completions").mock(side_effect=_capture)
+    with client_with_openai.stream(
+        "POST",
+        "/v1/chat/completions",
+        headers=HEADERS,
+        json={"model": "llama/foo", "messages": [], "stream": 1},
+    ) as r:
+        r.read()
+    assert captured["body"]["stream"] is True
+    assert captured["body"]["model"] == "foo"

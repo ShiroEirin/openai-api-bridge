@@ -18,6 +18,7 @@ from ..backends.base import Backend
 from ..config import parse_model_id
 from ..errors import InvalidRequest, UnsupportedOperation
 from ..resources import resources
+from ..util.json_body import JsonBody, parse_object
 
 
 def _overrides(backend: Backend, base_method: Callable[..., Any]) -> bool:
@@ -38,7 +39,7 @@ class Passthrough(NamedTuple):
     """A resolved passthrough request: where it goes and what to send."""
 
     backend: Backend
-    body: dict[str, Any]
+    body: JsonBody
     # Kept for error messages, which name the provider the client actually
     # asked for rather than the rewritten slug.
     provider_id: str
@@ -61,13 +62,11 @@ async def prepare(
     support it ("chat completions", "embeddings").
     """
     try:
-        body = await request.json()
+        body = parse_object(await request.body())
     except ValueError as e:
-        raise InvalidRequest(f"Request body must be JSON: {e}") from e
-    if not isinstance(body, dict):
-        raise InvalidRequest("Request body must be a JSON object")
+        raise InvalidRequest(f"Request body must be a JSON object: {e}") from e
 
-    model = body.get("model")
+    model = body.fields.get("model")
     if not isinstance(model, str) or not model:
         raise InvalidRequest("Missing or invalid 'model' field", param="model")
 
@@ -78,6 +77,7 @@ async def prepare(
         raise UnsupportedOperation(f"Provider {provider_id!r} does not support {operation}")
 
     # Rewrite the model id so the upstream sees its native slug, not our
-    # prefixed form.
-    forwarded: dict[str, Any] = {**body, "model": model_slug}
+    # prefixed form. Spliced into the caller's bytes rather than re-encoding
+    # the whole body for one string; see util.json_body.
+    forwarded = body.replace_top_level({"model": model_slug})
     return Passthrough(backend=backend, body=forwarded, provider_id=provider_id)
