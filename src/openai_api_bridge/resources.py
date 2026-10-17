@@ -24,13 +24,14 @@ from dataclasses import dataclass
 
 from fastapi import FastAPI, Request
 
+from .backends.base import ModelEntry
 from .config import BridgeSettings, ProvidersFile
 from .dispatcher import BackendDispatcher
 from .infra.db import Database
 from .infra.eviction import EvictionLoop
 from .infra.filestore import FileStore
 from .infra.jobstore import JobStore
-from .infra.tasks import TaskScheduler
+from .infra.tasks import SingleFlight, TaskScheduler
 
 # Deliberately not "state" or one of the field names: it occupies a single slot
 # on Starlette's shared State object, which middleware and extensions also
@@ -59,6 +60,10 @@ class BridgeResources:
     dispatcher: BackendDispatcher
     scheduler: TaskScheduler
     eviction: EvictionLoop
+    # Catalogue fetches that outlived the GET /v1/models request that started
+    # them, one per provider; drained at shutdown before the dispatcher
+    # closes the clients they hold. See api.models._entries_within.
+    catalogue_fetches: SingleFlight[list[ModelEntry]]
 
 
 def install(app: FastAPI, resources: BridgeResources) -> None:

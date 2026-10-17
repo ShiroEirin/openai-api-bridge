@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from openai_api_bridge.api.models import _entries_for, list_models
 from openai_api_bridge.backends.base import Backend, ModelEntry
 from openai_api_bridge.errors import UpstreamError
+from openai_api_bridge.infra.tasks import SingleFlight
 from openai_api_bridge.kinds import AssetKind
 from openai_api_bridge.resources import BridgeResources, install
 
@@ -48,20 +49,27 @@ class _FailingBackend(Backend):
         raise self._error
 
 
-def _request_with(providers: list[tuple[str, Backend]], *, budget: float = 5.0) -> Any:
+def _request_with(
+    providers: list[tuple[str, Backend]],
+    *,
+    budget: float = 5.0,
+    registry: SingleFlight[list[ModelEntry]] | None = None,
+) -> Any:
     """A stand-in Request carrying just the resources this endpoint reads.
 
     Installed through ``resources.install`` rather than by setting the
     attribute directly, so the test doesn't hardcode where the resource graph
     lives — that's the module's business, and it moved once already.
 
-    A stub rather than a real ``BridgeResources``: the endpoint reads two of
-    its eight fields, and building a database and a scheduler to test
-    fan-out ordering would be noise.
+    A stub rather than a real ``BridgeResources``: the endpoint reads three
+    of its fields, and building a database and a scheduler to test fan-out
+    ordering would be noise. Pass ``registry`` to inspect the fetches a
+    request left running; each request gets a fresh one otherwise.
     """
     stub = SimpleNamespace(
         dispatcher=SimpleNamespace(all_providers=lambda: providers),
         settings=SimpleNamespace(models_timeout_seconds=budget),
+        catalogue_fetches=registry if registry is not None else SingleFlight(),
     )
     app = SimpleNamespace(state=SimpleNamespace())
     install(cast(FastAPI, app), cast(BridgeResources, stub))
@@ -200,14 +208,8 @@ async def test_kind_is_surfaced(kind: AssetKind) -> None:
     assert body["data"][0]["kind"] == kind
 
 
-def _fresh_lingering(monkeypatch: Any) -> Any:
-    """Swap in an empty registry so cases don't inherit each other's tasks."""
-    from openai_api_bridge.api import models as models_api
-    from openai_api_bridge.infra.tasks import SingleFlight
-
-    registry: SingleFlight[list[ModelEntry]] = SingleFlight()
-    monkeypatch.setattr(models_api, "_lingering", registry)
-    return registry
+def _registry() -> SingleFlight[list[ModelEntry]]:
+    return SingleFlight()
 
 
 def _live_fetch_tasks() -> list[asyncio.Task[Any]]:
@@ -218,7 +220,7 @@ def _live_fetch_tasks() -> list[asyncio.Task[Any]]:
     ]
 
 
-async def test_concurrent_requests_share_one_fetch(monkeypatch: Any) -> None:
+async def test_concurrent_requests_share_one_fetch() -> None:
     """The registry must be authoritative from the task's birth, not from the
     moment the first caller gives up.
 
@@ -228,14 +230,14 @@ async def test_concurrent_requests_share_one_fetch(monkeypatch: Any) -> None:
     *untracked* task that ends up holding the upstream request, so a shutdown
     drain awaits the wrong one.
     """
-    registry = _fresh_lingering(monkeypatch)
+    registry = _registry()
     slow = _SlowBackend([ModelEntry(id="slow", kind="image")])
     providers: list[tuple[str, Backend]] = [("slow", slow)]
 
     bodies = await asyncio.gather(
-        list_models(_request_with(providers, budget=0.05)),
-        list_models(_request_with(providers, budget=0.05)),
-        list_models(_request_with(providers, budget=0.05)),
+        list_models(_request_with(providers, budget=0.05, registry=registry)),
+        list_models(_request_with(providers, budget=0.05, registry=registry)),
+        list_models(_request_with(providers, budget=0.05, registry=registry)),
     )
 
     assert all(b["data"] == [] for b in bodies)
@@ -249,7 +251,7 @@ async def test_concurrent_requests_share_one_fetch(monkeypatch: Any) -> None:
     await asyncio.sleep(0)
 
 
-async def test_a_finished_fetch_does_not_evict_its_successor(monkeypatch: Any) -> None:
+async def test_a_finished_fetch_does_not_evict_its_successor() -> None:
     """Removal is by identity, not by key.
 
     A key outlives the task occupying it. Popping by key lets a finishing task
@@ -285,14 +287,14 @@ async def test_a_finished_fetch_does_not_evict_its_successor(monkeypatch: Any) -
     await task_two
 
 
-async def test_a_cancelled_request_leaves_its_fetch_tracked(monkeypatch: Any) -> None:
+async def test_a_cancelled_request_leaves_its_fetch_tracked() -> None:
     """`shield` keeps the fetch alive, so the registry must still hold it."""
     from openai_api_bridge.api import models as models_api
 
-    registry = _fresh_lingering(monkeypatch)
+    registry = _registry()
     slow = _SlowBackend([ModelEntry(id="slow", kind="image")])
 
-    task = asyncio.create_task(models_api._entries_within("slow", slow, 30.0))
+    task = asyncio.create_task(models_api._entries_within("slow", slow, 30.0, registry))
     await asyncio.sleep(0)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -305,20 +307,19 @@ async def test_a_cancelled_request_leaves_its_fetch_tracked(monkeypatch: Any) ->
     await asyncio.sleep(0)
 
 
-async def test_drain_cancels_immediately_rather_than_waiting(monkeypatch: Any) -> None:
+async def test_drain_cancels_immediately_rather_than_waiting() -> None:
     """Everything in the registry is work a request already gave up on, warming
     a cache inside a backend about to be closed. Waiting first would add its
     grace period to every restart for a result that is discarded."""
-    from openai_api_bridge.api import models as models_api
 
-    registry = _fresh_lingering(monkeypatch)
+    registry = _registry()
     slow = _SlowBackend([ModelEntry(id="slow", kind="image")])
 
-    await list_models(_request_with([("slow", slow)], budget=0.05))
+    await list_models(_request_with([("slow", slow)], budget=0.05, registry=registry))
     assert registry.keys() == ["slow"]
 
     started = time.monotonic()
-    await models_api.drain_lingering()
+    await registry.cancel_all()
     elapsed = time.monotonic() - started
 
     assert elapsed < 0.5, f"drain waited {elapsed:.2f}s on a fetch nobody needs"
@@ -326,8 +327,5 @@ async def test_drain_cancels_immediately_rather_than_waiting(monkeypatch: Any) -
     assert _live_fetch_tasks() == []
 
 
-async def test_drain_is_a_no_op_when_nothing_is_lingering(monkeypatch: Any) -> None:
-    from openai_api_bridge.api import models as models_api
-
-    _fresh_lingering(monkeypatch)
-    await models_api.drain_lingering()
+async def test_drain_is_a_no_op_when_nothing_is_lingering() -> None:
+    await _registry().cancel_all()

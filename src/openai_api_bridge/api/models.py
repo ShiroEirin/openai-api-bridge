@@ -19,22 +19,6 @@ log = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Catalogue fetches that outlive the request that started them, one per
-# provider. See SingleFlight for why the entry is created with the task rather
-# than when the starter gives up, and why removal is identity-checked.
-_lingering: SingleFlight[list[ModelEntry]] = SingleFlight()
-
-
-async def drain_lingering() -> None:
-    """Stop orphaned catalogue fetches. Called from the app's shutdown path.
-
-    Ordered *before* the dispatcher closes its backends: these tasks are
-    awaiting on an httpx2 client ``BackendDispatcher.aclose`` is about to close
-    underneath them, which fails silently since ``_entries_for`` swallows
-    everything — and the loop would otherwise be torn down with them pending.
-    """
-    await _lingering.cancel_all()
-
 
 async def _entries_for(provider_id: str, backend: Backend) -> list[ModelEntry]:
     """One provider's catalogue, or an empty list if it failed."""
@@ -53,7 +37,12 @@ async def _entries_for(provider_id: str, backend: Backend) -> list[ModelEntry]:
         return []
 
 
-async def _entries_within(provider_id: str, backend: Backend, budget: float) -> list[ModelEntry]:
+async def _entries_within(
+    provider_id: str,
+    backend: Backend,
+    budget: float,
+    lingering: SingleFlight[list[ModelEntry]],
+) -> list[ModelEntry]:
     """``_entries_for``, but bounded — a slow provider sits out this listing.
 
     Containment used to cover failure but not *slowness*: the endpoint awaits
@@ -80,7 +69,10 @@ async def _entries_within(provider_id: str, backend: Backend, budget: float) -> 
     """
     if budget <= 0:
         return await _entries_for(provider_id, backend)
-    task = _lingering.join_or_start(
+    # `lingering` is the app's registry of fetches that outlive their request
+    # (BridgeResources.catalogue_fetches). See SingleFlight for why the entry
+    # is created with the task rather than when the starter gives up.
+    task = lingering.join_or_start(
         provider_id,
         lambda: _entries_for(provider_id, backend),
         name=f"list-models-{provider_id}",
@@ -113,7 +105,10 @@ async def list_models(request: Request) -> dict[str, Any]:
     providers = list(res.dispatcher.all_providers())
     budget = res.settings.models_timeout_seconds
     per_provider = await asyncio.gather(
-        *(_entries_within(provider_id, backend, budget) for provider_id, backend in providers)
+        *(
+            _entries_within(provider_id, backend, budget, res.catalogue_fetches)
+            for provider_id, backend in providers
+        )
     )
     for (provider_id, _backend), entries in zip(providers, per_provider, strict=True):
         for entry in entries:

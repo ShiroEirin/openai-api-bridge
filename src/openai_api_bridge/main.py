@@ -26,6 +26,7 @@ from .api import models as models_api
 from .api import videos as videos_api
 from .api._limits import BodySizeLimitMiddleware
 from .auth import ApiKeyMiddleware
+from .backends.base import ModelEntry
 from .config import (
     BridgeSettings,
     get_settings,
@@ -37,7 +38,7 @@ from .infra.db import Database, run_migrations
 from .infra.eviction import EvictionLoop
 from .infra.filestore import FileStore
 from .infra.jobstore import JobStore
-from .infra.tasks import TaskScheduler
+from .infra.tasks import SingleFlight, TaskScheduler
 from .resources import BridgeResources
 from .resources import install as install_resources
 from .util.http import aclose_asset_client
@@ -84,6 +85,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         interval_seconds=settings.eviction_interval_seconds,
     )
     eviction.start()
+    catalogue_fetches: SingleFlight[list[ModelEntry]] = SingleFlight()
 
     install_resources(
         app,
@@ -96,6 +98,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             dispatcher=dispatcher,
             scheduler=scheduler,
             eviction=eviction,
+            catalogue_fetches=catalogue_fetches,
         ),
     )
 
@@ -116,8 +119,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await scheduler.shutdown(timeout=30.0)
         # Before the dispatcher: these are catalogue fetches still holding a
         # backend's httpx2 client, which aclose() is about to close underneath
-        # them.
-        await models_api.drain_lingering()
+        # them — failing silently, since _entries_for swallows everything, and
+        # leaving the loop to be torn down with them pending. Cancelled rather
+        # than awaited: each is work a request already gave up on.
+        await catalogue_fetches.cancel_all()
         await dispatcher.aclose()
         # After the scheduler drains: a video job still unwinding may be
         # mid-download of its finished asset.
