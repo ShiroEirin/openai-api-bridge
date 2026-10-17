@@ -249,3 +249,36 @@ def test_provider_configs_reject_a_negative_asset_cap() -> None:
 
     with pytest.raises(ValidationError):
         FalProviderConfig(backend="fal", id="f", api_token_env="X", max_asset_mb=-1)
+
+
+def test_defaults_cache_workflows_reaches_comfyui_blocks_that_omit_it(tmp_path: Path) -> None:
+    """``[defaults] cache_workflows`` was parsed and never read, so setting it
+    false did nothing. A block's own value still wins."""
+    from openai_api_bridge.config import ComfyUIProviderConfig, load_providers
+
+    path = tmp_path / "config.toml"
+    path.write_text(
+        textwrap.dedent("""
+        [defaults]
+        cache_workflows = false
+
+        [[providers]]
+        id = "inherits"
+        backend = "comfyui"
+        url = "http://a:8188"
+        workflows_dir = "/tmp"
+
+        [[providers]]
+        id = "overrides"
+        backend = "comfyui"
+        url = "http://b:8188"
+        workflows_dir = "/tmp"
+        cache_workflows = true
+        """)
+    )
+    providers = {p.id: p for p in load_providers(path).providers}
+    inherits, overrides = providers["inherits"], providers["overrides"]
+    assert isinstance(inherits, ComfyUIProviderConfig)
+    assert isinstance(overrides, ComfyUIProviderConfig)
+    assert inherits.cache_workflows is False
+    assert overrides.cache_workflows is True

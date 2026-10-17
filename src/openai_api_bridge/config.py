@@ -19,7 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .errors import BridgeError, InvalidRequest
@@ -546,12 +546,41 @@ ProviderConfig = Annotated[
 
 
 class Defaults(BaseModel):
+    """``[defaults]``: values a provider block inherits when it sets none."""
+
+    # ComfyUI providers' ``cache_workflows`` when their own block omits it.
     cache_workflows: bool = True
 
 
 class ProvidersFile(BaseModel):
     defaults: Defaults = Field(default_factory=Defaults)
     providers: list[ProviderConfig] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_defaults(cls, data: Any) -> Any:
+        """Fill each ComfyUI block's omitted ``cache_workflows`` from ``[defaults]``.
+
+        Parsed and documented, ``[defaults] cache_workflows`` was never read:
+        every provider fell back to its own field default of true, so
+        ``[defaults] cache_workflows = false`` silently did nothing. Applied to
+        the raw TOML so the provider field stays a plain bool.
+        """
+        if not isinstance(data, dict):
+            return data
+        defaults = data.get("defaults")
+        providers = data.get("providers")
+        if not isinstance(defaults, dict) or "cache_workflows" not in defaults:
+            return data
+        if not isinstance(providers, list):
+            return data
+        filled = [
+            {"cache_workflows": defaults["cache_workflows"], **p}
+            if isinstance(p, dict) and p.get("backend") == "comfyui"
+            else p
+            for p in providers
+        ]
+        return {**data, "providers": filled}
 
     def by_id(self, provider_id: str) -> ProviderConfig | None:
         for p in self.providers:

@@ -26,6 +26,8 @@ arrived.
 
 ### Fixed
 
+- `[defaults] cache_workflows` now applies to ComfyUI providers that don't set
+  their own. It was read and ignored, so setting it false did nothing.
 - A video job that runs too long now fails as timed out rather than as
   cancelled. The cap is now `VIDEO_JOB_TIMEOUT_SECONDS` (default one hour, was
   a fixed 30 minutes that cut off fal and ImageRouter's own 30-minute waits).

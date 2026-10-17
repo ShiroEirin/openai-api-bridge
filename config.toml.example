@@ -10,6 +10,7 @@
 # file stays safe to check into a private repo.
 
 [defaults]
+# Inherited by every ComfyUI provider block that doesn't set its own.
 cache_workflows = true                 # rescan only when bridge restarts
 
 
