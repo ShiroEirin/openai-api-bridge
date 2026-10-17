@@ -367,6 +367,7 @@ sensibly:
 | `MAX_CACHE_GB` | `50` | Size cap for the file cache (LRU past this) |
 | `EVICTION_INTERVAL_SECONDS` | `600` | How often the eviction loop runs |
 | `MAX_CONCURRENT_VIDEO_JOBS` | `2` | Parallel video generations (see [Video jobs](#video-jobs)) |
+| `VIDEO_JOB_TIMEOUT_SECONDS` | `3600` | Wall-clock cap on one video job once it starts (see [Video jobs](#video-jobs)) |
 | `MODELS_TIMEOUT_SECONDS` | `5` | Per-provider budget for `GET /v1/models` (see [Model catalogue caching](#model-catalogue-caching)); `0` disables |
 | `LOG_LEVEL` | `INFO` | TRACE / DEBUG / INFO / WARNING / ERROR |
 
@@ -541,8 +542,11 @@ content). Operationally:
 
 - At most `MAX_CONCURRENT_VIDEO_JOBS` (default 2) run at once; excess jobs
   queue in `status: "queued"` order.
-- Each job has a hard 30-minute wall-clock cap, independent of the
-  per-provider poll timeouts.
+- Each job has a wall-clock cap, `VIDEO_JOB_TIMEOUT_SECONDS` (default one
+  hour), counted from when it leaves the queue. It sits above every
+  provider's own video timeout, so a provider's error is what a client
+  normally sees; a job that reaches the cap fails with a timeout message,
+  not as cancelled.
 - On bridge restart, jobs that were queued/in-progress are marked `failed`
   ("bridge restarted") rather than left dangling — clients never poll a
   zombie job forever.

@@ -24,6 +24,10 @@ log = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# How far past a video job's own deadline the scheduler's hard cap sits: room
+# for the runner to record the timeout before anything cancels it.
+_BACKSTOP_GRACE_SECONDS = 60.0
+
 
 def _video_to_dict(job: VideoJob) -> dict[str, Any]:
     """Render a VideoJob row in the OpenAI-compatible Sora video object shape."""
@@ -100,8 +104,13 @@ async def videos_create(
             dispatcher=res.dispatcher,
             jobstore=res.jobstore,
             filestore=res.filestore,
+            timeout_seconds=res.settings.video_job_timeout_seconds,
         ),
         name=f"video-job-{job_id}",
+        # The runner enforces the job's deadline itself, so its row says it
+        # timed out. The scheduler's cap is only the backstop past it, for a
+        # runner that somehow does not stop.
+        timeout_seconds=res.settings.video_job_timeout_seconds + _BACKSTOP_GRACE_SECONDS,
     )
 
     return _video_to_dict(job)

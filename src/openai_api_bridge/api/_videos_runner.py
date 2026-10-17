@@ -32,8 +32,17 @@ async def run_video_job(
     dispatcher: BackendDispatcher,
     jobstore: JobStore,
     filestore: FileStore,
+    timeout_seconds: float | None = None,
 ) -> None:
-    """Drive one video generation; persist state transitions to ``video_jobs``."""
+    """Drive one video generation; persist state transitions to ``video_jobs``.
+
+    ``timeout_seconds`` bounds the whole job, render and storage both, and
+    fails the row with a message that says so. It is enforced here rather
+    than left to the scheduler's hard cap, because a cap applied from outside
+    arrives as a cancellation and the row would read "Job cancelled" — the
+    same as a user's ``DELETE`` — for what was a timeout. ``None`` sets none.
+    """
+    deadline = asyncio.timeout(timeout_seconds)
 
     async def _persist_upstream_id(upstream_id: str) -> None:
         try:
@@ -41,7 +50,7 @@ async def run_video_job(
         except Exception:
             log.exception("Failed to persist upstream_id for job %s", job_id)
 
-    try:
+    async def _render() -> None:
         await jobstore.update(job_id, status="in_progress")
         backend = dispatcher.for_provider(provider_id)
         asset = await backend.generate_video(
@@ -75,6 +84,10 @@ async def run_video_job(
             aspect_ratio=asset.aspect_ratio,
         )
         log.info("Video job %s completed; file_id=%s", job_id, file_id)
+
+    try:
+        async with deadline:
+            await _render()
     except asyncio.CancelledError:
         log.info("Video job %s cancelled; marking failed", job_id)
         # Best-effort: mark the row failed so it doesn't sit in_progress
@@ -88,6 +101,23 @@ async def run_video_job(
         except Exception:
             log.exception("Failed to mark cancelled job %s as failed", job_id)
         raise
+    except TimeoutError:
+        if not deadline.expired():
+            # Not our deadline: something inside raised a bare TimeoutError.
+            # Treat it like any other unexpected failure.
+            log.exception("Video job %s failed (unexpected)", job_id)
+            await jobstore.update(
+                job_id, status="failed", error_message="Internal error: TimeoutError"
+            )
+            return
+        log.warning("Video job %s exceeded its %ss limit", job_id, timeout_seconds)
+        await jobstore.update(
+            job_id,
+            status="failed",
+            error_message=(
+                f"Video job timed out after {timeout_seconds:.0f}s (VIDEO_JOB_TIMEOUT_SECONDS)"
+            ),
+        )
     except BridgeError as e:
         log.warning("Video job %s failed (bridge error): %s", job_id, e.message)
         await jobstore.update(job_id, status="failed", error_message=e.message)

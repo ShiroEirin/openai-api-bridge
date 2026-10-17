@@ -17,6 +17,9 @@ arrived.
 
 ### Fixed
 
+- A video job that runs too long now fails as timed out rather than as
+  cancelled. The cap is now `VIDEO_JOB_TIMEOUT_SECONDS` (default one hour, was
+  a fixed 30 minutes that cut off fal and ImageRouter's own 30-minute waits).
 - A ComfyUI workflow that errors or is interrupted now fails the request with
   ComfyUI's error, instead of returning whatever its earlier nodes had saved.
 

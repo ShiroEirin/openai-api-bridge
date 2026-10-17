@@ -106,6 +106,14 @@ class BridgeSettings(BaseSettings):
     max_cache_gb: int = Field(default=50, alias="MAX_CACHE_GB")
     eviction_interval_seconds: int = Field(default=600, alias="EVICTION_INTERVAL_SECONDS")
     max_concurrent_video_jobs: int = Field(default=2, alias="MAX_CONCURRENT_VIDEO_JOBS")
+    # Wall-clock cap on one video job, from when it leaves the queue to when
+    # its file is stored. Above every provider's own default video timeout
+    # (fal and ImageRouter wait up to 30 minutes, then download the result),
+    # so a provider's more specific error is what a client normally sees and
+    # this only catches a job nothing else bounded.
+    video_job_timeout_seconds: float = Field(
+        default=3600.0, gt=0, alias="VIDEO_JOB_TIMEOUT_SECONDS"
+    )
     # How long `GET /v1/models` waits for any one provider's catalogue before
     # leaving it out of *this* listing. The endpoint awaits every provider at
     # once, so without a bound its latency is the slowest upstream's read

@@ -179,3 +179,60 @@ async def test_cancellation_propagates_even_if_marking_the_job_fails(
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+async def _run_with_timeout(
+    generate: Any, jobstore: JobStore, filestore: FileStore, timeout: float
+) -> None:
+    await jobstore.create(
+        job_id="job1", model="p/m", prompt="a cat", size=None, aspect_ratio=None, seconds=None
+    )
+    await run_video_job(
+        job_id="job1",
+        provider_id="p",
+        model_slug="m",
+        prompt="a cat",
+        size=None,
+        aspect_ratio=None,
+        seconds=None,
+        input_reference=None,
+        input_reference_content_type=None,
+        dispatcher=cast(BackendDispatcher, _StubDispatcher(_StubBackend(generate))),
+        jobstore=jobstore,
+        filestore=filestore,
+        timeout_seconds=timeout,
+    )
+
+
+async def test_the_job_deadline_fails_the_job_as_a_timeout(
+    jobstore: JobStore, filestore: FileStore
+) -> None:
+    """The scheduler's hard cap reaches a job as a cancellation, so a job
+    that relied on it read "Job cancelled", the same as a user's DELETE.
+    The runner's own deadline says what actually happened."""
+
+    async def generate(**_: Any) -> GeneratedAsset:
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+    await _run_with_timeout(generate, jobstore, filestore, 0.05)  # contained
+
+    job = await jobstore.get("job1")
+    assert job is not None
+    assert job.status == "failed"
+    assert job.error_message is not None
+    assert job.error_message.startswith("Video job timed out after")
+
+
+async def test_a_bare_timeout_error_from_inside_is_not_the_deadline(
+    jobstore: JobStore, filestore: FileStore
+) -> None:
+    async def generate(**_: Any) -> GeneratedAsset:
+        raise TimeoutError
+
+    await _run_with_timeout(generate, jobstore, filestore, 60.0)
+
+    job = await jobstore.get("job1")
+    assert job is not None
+    assert job.status == "failed"
+    assert job.error_message == "Internal error: TimeoutError"
