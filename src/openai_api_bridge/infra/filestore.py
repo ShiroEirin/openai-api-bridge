@@ -38,10 +38,25 @@ log = logging.getLogger(__name__)
 
 
 def _write_atomic(tmp_path: Path, final_path: Path, data: bytes) -> None:
-    """Write ``data`` to ``final_path`` via a temp file. Runs in a worker thread."""
+    """Write ``data`` to ``final_path`` via a temp file. Runs in a worker thread.
+
+    A failed write (disk full, mid-write I/O error) removes its partial temp
+    file rather than leaving it for nothing to ever find: eviction works from
+    the database, and a ``.tmp`` has no row.
+    """
     final_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path.write_bytes(data)
-    tmp_path.replace(final_path)  # atomic on same FS
+    try:
+        tmp_path.write_bytes(data)
+        tmp_path.replace(final_path)  # atomic on same FS
+    except BaseException:
+        with contextlib.suppress(OSError):
+            tmp_path.unlink()
+        raise
+
+
+def _discard(path: Path) -> None:
+    with contextlib.suppress(OSError):
+        path.unlink()
 
 
 def _unlink_all(paths: list[Path]) -> None:
@@ -170,32 +185,46 @@ class FileStore:
         # and the bridge runs a single uvicorn worker, so a synchronous write
         # stalls every other client for its duration (measured ~58ms for
         # 200MB on local SSD, and it degrades badly on network-backed storage).
-        await asyncio.to_thread(_write_atomic, tmp_path, abs_path, data)
+        write = asyncio.ensure_future(asyncio.to_thread(_write_atomic, tmp_path, abs_path, data))
+        try:
+            await asyncio.shield(write)
+        except asyncio.CancelledError:
+            # The worker thread cannot be stopped and will finish the rename
+            # after we have gone. Remove the file once it lands, or it sits
+            # on disk with no row, invisible to eviction, forever.
+            write.add_done_callback(lambda _: _discard(abs_path))
+            raise
 
         relative = str(abs_path.relative_to(self.files_dir))
         now = int(time.time())
         excerpt = (prompt_excerpt or "")[:500] or None
 
-        await self.db.execute(
-            """INSERT INTO generated_files (
-                   id, storage_path, content_type, byte_size, kind,
-                   source_backend, source_model, prompt_excerpt,
-                   created_at, last_accessed_at, pinned
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                file_id,
-                relative,
-                content_type,
-                len(data),
-                kind,
-                source_backend,
-                source_model,
-                excerpt,
-                now,
-                now,
-                1 if pinned else 0,
-            ),
-        )
+        try:
+            await self.db.execute(
+                """INSERT INTO generated_files (
+                       id, storage_path, content_type, byte_size, kind,
+                       source_backend, source_model, prompt_excerpt,
+                       created_at, last_accessed_at, pinned
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    file_id,
+                    relative,
+                    content_type,
+                    len(data),
+                    kind,
+                    source_backend,
+                    source_model,
+                    excerpt,
+                    now,
+                    now,
+                    1 if pinned else 0,
+                ),
+            )
+        except BaseException:
+            # The bytes are on disk but no row will ever reference them, so
+            # nothing would ever evict them either.
+            _discard(abs_path)
+            raise
         return file_id
 
     async def get_metadata(self, file_id: str) -> FileMetadata | None:

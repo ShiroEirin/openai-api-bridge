@@ -398,3 +398,76 @@ async def test_read_sanitises_a_row_written_before_the_allowlist(filestore: File
     opened = await filestore.open_for_read(file_id)
     assert opened is not None
     assert opened.meta.content_type == "application/octet-stream"
+
+
+def _files_on_disk(root: Path) -> list[Path]:
+    return [p for p in root.rglob("*") if p.is_file()]
+
+
+async def test_a_failed_write_leaves_no_temp_file(
+    filestore: FileStore, files_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def replace(self: Path, target: Path) -> Path:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "replace", replace)
+    with pytest.raises(OSError, match="disk full"):
+        await filestore.put(
+            b"x", content_type="image/png", kind="image", source_backend="b", source_model="m"
+        )
+    assert _files_on_disk(files_dir) == []
+
+
+async def test_a_failed_row_insert_removes_the_written_file(
+    filestore: FileStore, files_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Eviction works from the table, so a file with no row is never removed."""
+
+    async def execute(*_: object, **__: object) -> None:
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(filestore.db, "execute", execute)
+    with pytest.raises(RuntimeError):
+        await filestore.put(
+            b"x", content_type="image/png", kind="image", source_backend="b", source_model="m"
+        )
+    assert _files_on_disk(files_dir) == []
+
+
+async def test_cancelling_mid_write_removes_the_file_once_the_thread_finishes(
+    filestore: FileStore, files_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import asyncio
+    import threading
+
+    from openai_api_bridge.infra import filestore as filestore_module
+
+    entered = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    real_write = filestore_module._write_atomic
+
+    def slow_write(tmp_path: Path, final_path: Path, data: bytes) -> None:
+        entered.set()
+        release.wait(5)
+        real_write(tmp_path, final_path, data)
+        finished.set()
+
+    monkeypatch.setattr(filestore_module, "_write_atomic", slow_write)
+    task = asyncio.create_task(
+        filestore.put(
+            b"x", content_type="image/png", kind="image", source_backend="b", source_model="m"
+        )
+    )
+    await asyncio.to_thread(entered.wait, 5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    release.set()
+    await asyncio.to_thread(finished.wait, 5)
+    for _ in range(100):  # the cleanup callback runs on the loop after the thread
+        if not _files_on_disk(files_dir):
+            break
+        await asyncio.sleep(0.01)
+    assert _files_on_disk(files_dir) == []
