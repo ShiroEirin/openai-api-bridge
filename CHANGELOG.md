@@ -21,6 +21,8 @@ arrived.
 
 ### Security
 
+- A video job that fails unexpectedly reports only the error's type to clients;
+  the full error stays in the bridge's log.
 - A fal model id containing URL syntax (`?`, `#`, `%`, `..`) is refused rather
   than placed in the path of a request carrying the bridge's fal key.
 - The bearer token is checked before a request body is read. Image and video

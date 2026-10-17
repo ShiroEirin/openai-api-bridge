@@ -91,7 +91,8 @@ async def test_an_unexpected_exception_still_fails_the_job(
     job = await jobstore.get("job1")
     assert job is not None
     assert job.status == "failed"
-    assert job.error_message == "Internal error: KeyError: 'video'"
+    # The type, not the text: the row is served to clients, the detail is logged.
+    assert job.error_message == "Internal error: KeyError"
 
 
 async def test_a_bridge_error_fails_the_job_with_its_own_message(

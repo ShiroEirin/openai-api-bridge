@@ -123,8 +123,13 @@ async def run_video_job(
         await jobstore.update(job_id, status="failed", error_message=e.message)
     except Exception as e:
         log.exception("Video job %s failed (unexpected)", job_id)
+        # The type only. The row is served to clients by GET /v1/videos/{id},
+        # and an unexpected exception's text is whatever the code that raised
+        # it chose to put there — upstream URLs, file paths, response
+        # fragments. The full exception and traceback are in the log above,
+        # the same split the synchronous routes' 500 handler makes.
         await jobstore.update(
             job_id,
             status="failed",
-            error_message=f"Internal error: {type(e).__name__}: {e}",
+            error_message=f"Internal error: {type(e).__name__}",
         )
