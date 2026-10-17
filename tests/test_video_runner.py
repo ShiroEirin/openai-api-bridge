@@ -235,3 +235,28 @@ async def test_a_bare_timeout_error_from_inside_is_not_the_deadline(
     assert job is not None
     assert job.status == "failed"
     assert job.error_message == "Internal error: TimeoutError"
+
+
+async def test_a_deadline_landing_after_the_completed_write_leaves_it_completed(
+    jobstore: JobStore, filestore: FileStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The deadline can expire while the final "completed" write is in
+    flight; if that write commits, the timeout must not overwrite it."""
+    real_update = jobstore.update
+
+    async def update(job_id: str, **fields: Any) -> None:
+        await real_update(job_id, **fields)
+        if fields.get("status") == "completed":
+            await asyncio.sleep(1)  # the deadline expires after the commit
+
+    monkeypatch.setattr(jobstore, "update", update)
+
+    async def generate(**_: Any) -> GeneratedAsset:
+        return _ASSET
+
+    await _run_with_timeout(generate, jobstore, filestore, 0.2)
+
+    job = await jobstore.get("job1")
+    assert job is not None
+    assert job.status == "completed"
+    assert job.file_id is not None

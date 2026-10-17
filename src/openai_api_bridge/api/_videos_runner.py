@@ -110,12 +110,12 @@ async def run_video_job(
             )
             return
         log.warning("Video job %s exceeded its %ss limit", job_id, timeout_seconds)
-        await jobstore.update(
+        # Conditional, like the cancel path: the deadline can fire while the
+        # final "completed" write is in flight, and that write may still land.
+        # An unconditional update would then flip a finished render to failed.
+        await jobstore.fail_if_active(
             job_id,
-            status="failed",
-            error_message=(
-                f"Video job timed out after {timeout_seconds:.0f}s (VIDEO_JOB_TIMEOUT_SECONDS)"
-            ),
+            f"Video job timed out after {timeout_seconds:.0f}s (VIDEO_JOB_TIMEOUT_SECONDS)",
         )
     except BridgeError as e:
         log.warning("Video job %s failed (bridge error): %s", job_id, e.message)
