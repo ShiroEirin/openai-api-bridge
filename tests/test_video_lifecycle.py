@@ -173,6 +173,47 @@ async def test_scheduler_cancel_releases_semaphore() -> None:
 
 
 @pytest.mark.asyncio
+async def test_scheduler_cancel_while_queued_closes_the_coroutine() -> None:
+    """A job cancelled before it gets a permit never starts. Its coroutine
+    must be closed rather than dropped, or every such cancel warns
+    "coroutine was never awaited" at garbage collection, and the permit
+    accounting must survive it."""
+    import inspect
+
+    scheduler = TaskScheduler(max_concurrent=1)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def holder() -> None:
+        started.set()
+        await release.wait()
+
+    async def never_runs() -> None:
+        raise AssertionError("a cancelled queued job ran")
+
+    first = scheduler.submit(holder(), name="holder")
+    await started.wait()
+    queued_coro = never_runs()
+    queued = scheduler.submit(queued_coro, name="queued")
+    await asyncio.sleep(0)  # let it block on the semaphore
+
+    assert scheduler.cancel("queued") is True
+    with pytest.raises(asyncio.CancelledError):
+        await queued
+    assert inspect.getcoroutinestate(queued_coro) == inspect.CORO_CLOSED
+
+    release.set()
+    await first
+    fired = asyncio.Event()
+
+    async def quick() -> None:
+        fired.set()
+
+    scheduler.submit(quick(), name="after")
+    await asyncio.wait_for(fired.wait(), timeout=1.0)
+
+
+@pytest.mark.asyncio
 async def test_scheduler_cancel_unknown_task_returns_false() -> None:
     scheduler = TaskScheduler(max_concurrent=1)
     assert scheduler.cancel("never-existed") is False

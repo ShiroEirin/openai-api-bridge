@@ -25,15 +25,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 log = logging.getLogger(__name__)
 
 # Defensive upper bound on how long any one background task can hold its
-# semaphore permit. Even with the comfyui poll loop bounded by its own
-# generation timeout, this gives us a guaranteed permit-release floor in case
-# a future backend introduces an unbounded await.
+# semaphore permit, for a task submitted without its own. A backstop, not a
+# deadline: a cap applied from out here reaches the task as a cancellation,
+# so work that wants its timeout reported as one (video jobs do) enforces it
+# itself and submits with a ``timeout_seconds`` a little past it.
 DEFAULT_TASK_TIMEOUT_SECONDS = 1800.0
 
 
@@ -53,7 +54,7 @@ class TaskScheduler:
 
     def submit(
         self,
-        coro: Awaitable[Any],
+        coro: Coroutine[Any, Any, Any],
         *,
         name: str | None = None,
         timeout_seconds: float | None = None,
@@ -68,20 +69,31 @@ class TaskScheduler:
         timeout = self._default_timeout if timeout_seconds is None else timeout_seconds
 
         async def _runner() -> None:
-            async with self._sem:
-                try:
-                    await asyncio.wait_for(coro, timeout=timeout)
-                except TimeoutError:
-                    log.error(
-                        "Background task %r exceeded hard timeout of %.0fs; cancelled",
-                        name,
-                        timeout,
-                    )
-                except asyncio.CancelledError:
-                    log.info("Background task %r cancelled", name)
-                    raise
-                except Exception:
-                    log.exception("Background task %r failed", name)
+            try:
+                await self._sem.acquire()
+            except asyncio.CancelledError:
+                # Cancelled while still queued for a permit, so ``coro`` was
+                # never started. Close it, or it is collected un-awaited and
+                # Python warns "coroutine was never awaited" for every job
+                # cancelled before its turn.
+                coro.close()
+                log.info("Background task %r cancelled before it started", name)
+                raise
+            try:
+                await asyncio.wait_for(coro, timeout=timeout)
+            except TimeoutError:
+                log.error(
+                    "Background task %r exceeded hard timeout of %.0fs; cancelled",
+                    name,
+                    timeout,
+                )
+            except asyncio.CancelledError:
+                log.info("Background task %r cancelled", name)
+                raise
+            except Exception:
+                log.exception("Background task %r failed", name)
+            finally:
+                self._sem.release()
 
         task = asyncio.create_task(_runner(), name=name)
         self._tasks.add(task)
