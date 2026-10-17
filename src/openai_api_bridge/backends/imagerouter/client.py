@@ -38,7 +38,7 @@ from ...errors import UpstreamError
 from ...util.http import (
     fetch_asset_with_retry,
     parse_json,
-    raise_for_upstream_status,
+    request_upstream,
     upstream_client,
 )
 from ...util.media import image_filename
@@ -83,18 +83,14 @@ class ImageRouterClient:
         adapter does that checking and translates the result into the
         bridge's flat ModelEntry list.
         """
-        try:
-            resp = await self._client.get(f"{self.base_url}/v2/models", timeout=30.0)
-            resp.raise_for_status()
-        except httpx2.HTTPStatusError as e:
-            raise_for_upstream_status(
-                status=e.response.status_code,
-                body=e.response.text[:300],
-                provider="ImageRouter",
-                endpoint="/v2/models",
-            )
-        except httpx2.HTTPError as e:
-            raise UpstreamError(f"ImageRouter /v2/models failed: {e}") from e
+        resp = await request_upstream(
+            self._client,
+            "GET",
+            f"{self.base_url}/v2/models",
+            timeout=30.0,
+            provider="ImageRouter",
+            endpoint="/v2/models",
+        )
         body = parse_json(resp, "ImageRouter /v2/models")
         if not isinstance(body, list):
             raise UpstreamError(
@@ -116,20 +112,14 @@ class ImageRouterClient:
         }
         if size:
             payload["size"] = size
-        try:
-            resp = await self._client.post(
-                f"{self.base_url}/v1/openai/images/generations", json=payload
-            )
-            resp.raise_for_status()
-        except httpx2.HTTPStatusError as e:
-            raise_for_upstream_status(
-                status=e.response.status_code,
-                body=e.response.text[:300],
-                provider="ImageRouter",
-                endpoint="/images/generations",
-            )
-        except httpx2.HTTPError as e:
-            raise UpstreamError(f"ImageRouter /images/generations failed: {e}") from e
+        resp = await request_upstream(
+            self._client,
+            "POST",
+            f"{self.base_url}/v1/openai/images/generations",
+            json=payload,
+            provider="ImageRouter",
+            endpoint="/images/generations",
+        )
         return _extract_first_url(
             parse_json(resp, "ImageRouter /images/generations"), "/images/generations"
         )
@@ -165,22 +155,15 @@ class ImageRouterClient:
             ("image[]", (_filename_for(img.content_type), img.data, img.content_type))
             for img in images
         ]
-        try:
-            resp = await self._client.post(
-                f"{self.base_url}/v1/openai/images/edits",
-                data=data,
-                files=files,
-            )
-            resp.raise_for_status()
-        except httpx2.HTTPStatusError as e:
-            raise_for_upstream_status(
-                status=e.response.status_code,
-                body=e.response.text[:300],
-                provider="ImageRouter",
-                endpoint="/images/edits",
-            )
-        except httpx2.HTTPError as e:
-            raise UpstreamError(f"ImageRouter /images/edits failed: {e}") from e
+        resp = await request_upstream(
+            self._client,
+            "POST",
+            f"{self.base_url}/v1/openai/images/edits",
+            data=data,
+            files=files,
+            provider="ImageRouter",
+            endpoint="/images/edits",
+        )
         return _extract_first_url(parse_json(resp, "ImageRouter /images/edits"), "/images/edits")
 
     # --- video generation ------------------------------------------------
@@ -216,32 +199,24 @@ class ImageRouterClient:
         if seconds is not None:
             params["duration"] = seconds
 
-        try:
-            if input_reference is not None:
-                ct = input_reference_content_type or "image/png"
-                filename = _filename_for(ct)
-                resp = await self._client.post(
-                    f"{self.base_url}/v1/openai/videos/generations",
-                    data=params,
-                    files=[("image[]", (filename, input_reference, ct))],
-                    timeout=httpx2.Timeout(_DEFAULT_VIDEO_READ_TIMEOUT_S, connect=10.0),
-                )
-            else:
-                resp = await self._client.post(
-                    f"{self.base_url}/v1/openai/videos/generations",
-                    json=params,
-                    timeout=httpx2.Timeout(_DEFAULT_VIDEO_READ_TIMEOUT_S, connect=10.0),
-                )
-            resp.raise_for_status()
-        except httpx2.HTTPStatusError as e:
-            raise_for_upstream_status(
-                status=e.response.status_code,
-                body=e.response.text[:300],
-                provider="ImageRouter",
-                endpoint="/videos/generations",
-            )
-        except httpx2.HTTPError as e:
-            raise UpstreamError(f"ImageRouter /videos/generations failed: {e}") from e
+        body: dict[str, Any]
+        if input_reference is not None:
+            ct = input_reference_content_type or "image/png"
+            body = {
+                "data": params,
+                "files": [("image[]", (_filename_for(ct), input_reference, ct))],
+            }
+        else:
+            body = {"json": params}
+        resp = await request_upstream(
+            self._client,
+            "POST",
+            f"{self.base_url}/v1/openai/videos/generations",
+            provider="ImageRouter",
+            endpoint="/videos/generations",
+            timeout=httpx2.Timeout(_DEFAULT_VIDEO_READ_TIMEOUT_S, connect=10.0),
+            **body,
+        )
         return _extract_first_url(
             parse_json(resp, "ImageRouter /videos/generations"), "/videos/generations"
         )

@@ -38,7 +38,7 @@ from ...errors import (
 from ...util.http import (
     fetch_asset_with_retry,
     parse_json,
-    raise_for_upstream_status,
+    request_upstream,
     upstream_client,
 )
 
@@ -167,18 +167,15 @@ class FalClient:
         fetches bytes for each returned URL via :meth:`fetch_asset`.
         """
         url = f"{self.base_url}/{_model_path(model_id)}"
-        try:
-            resp = await self._client.post(url, json=body, headers=self._inference_headers)
-            resp.raise_for_status()
-        except httpx2.HTTPStatusError as e:
-            raise_for_upstream_status(
-                status=e.response.status_code,
-                body=e.response.text[:300],
-                provider="fal",
-                endpoint=model_id,
-            )
-        except httpx2.HTTPError as e:
-            raise UpstreamError(f"fal {model_id} failed: {e}") from e
+        resp = await request_upstream(
+            self._client,
+            "POST",
+            url,
+            json=body,
+            headers=self._inference_headers,
+            provider="fal",
+            endpoint=model_id,
+        )
         return _extract_image_urls(parse_json(resp, f"fal {model_id}"), model_id)
 
     # --- queued inference (video) ----------------------------------------
@@ -193,18 +190,15 @@ class FalClient:
         them and guessing at fal's path layout.
         """
         url = f"{self.queue_base_url}/{_model_path(model_id)}"
-        try:
-            resp = await self._client.post(url, json=body, headers=self._inference_headers)
-            resp.raise_for_status()
-        except httpx2.HTTPStatusError as e:
-            raise_for_upstream_status(
-                status=e.response.status_code,
-                body=e.response.text[:300],
-                provider="fal",
-                endpoint=model_id,
-            )
-        except httpx2.HTTPError as e:
-            raise UpstreamError(f"fal {model_id} queue submit failed: {e}") from e
+        resp = await request_upstream(
+            self._client,
+            "POST",
+            url,
+            json=body,
+            headers=self._inference_headers,
+            provider="fal",
+            endpoint=model_id,
+        )
         body_json = parse_json(resp, f"fal {model_id} queue submit")
         if not isinstance(body_json, dict):
             raise UpstreamError(f"fal {model_id} queue submit returned non-dict body")

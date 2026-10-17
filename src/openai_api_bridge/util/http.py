@@ -143,6 +143,38 @@ def raise_for_upstream_status(*, status: int, body: str, provider: str, endpoint
     raise UpstreamError(f"{provider} {endpoint} returned {status}: {body}")
 
 
+async def request_upstream(
+    client: httpx2.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    provider: str,
+    endpoint: str,
+    **kwargs: Any,
+) -> httpx2.Response:
+    """Send one request to a backend's API; a typed bridge error on any failure.
+
+    The send, ``raise_for_status``, :func:`raise_for_upstream_status` mapping
+    and transport-error wrapping were written out at every call site — ten
+    copies of one block, differing only in the provider and endpoint names.
+    ``kwargs`` go to ``client.request`` unchanged (``json``, ``data``,
+    ``files``, ``params``, ``headers``, ``timeout``).
+    """
+    try:
+        response = await client.request(method, url, **kwargs)
+        response.raise_for_status()
+    except httpx2.HTTPStatusError as e:
+        raise_for_upstream_status(
+            status=e.response.status_code,
+            body=e.response.text[:300],
+            provider=provider,
+            endpoint=endpoint,
+        )
+    except httpx2.HTTPError as e:
+        raise UpstreamError(f"{provider} {endpoint} failed: {e}") from e
+    return response
+
+
 def parse_json(resp: httpx2.Response, what: str) -> Any:
     """Decode a JSON response body, reporting a non-JSON one as an upstream fault.
 

@@ -25,7 +25,7 @@ from typing import Any
 import httpx2
 
 from ...errors import UpstreamError
-from ...util.http import parse_json, raise_for_upstream_status, upstream_client
+from ...util.http import parse_json, request_upstream, upstream_client
 from ...util.media import image_filename
 
 log = logging.getLogger(__name__)
@@ -50,20 +50,14 @@ class VeniceClient:
         ``inpaint`` — the edit models are a separate listing, not a flag on the
         generate ones.
         """
-        try:
-            response = await self._client.get(
-                f"{self.base_url}/api/v1/models", params={"type": model_type}
-            )
-            response.raise_for_status()
-        except httpx2.HTTPStatusError as e:
-            raise_for_upstream_status(
-                status=e.response.status_code,
-                body=e.response.text[:300],
-                provider="Venice",
-                endpoint="/models",
-            )
-        except httpx2.HTTPError as e:
-            raise UpstreamError(f"Venice /models failed: {e}") from e
+        response = await request_upstream(
+            self._client,
+            "GET",
+            f"{self.base_url}/api/v1/models",
+            params={"type": model_type},
+            provider="Venice",
+            endpoint="/models",
+        )
         body = parse_json(response, "Venice /models")
         return list(body.get("data", []))
 
@@ -89,20 +83,14 @@ class VeniceClient:
             "return_binary": False,
             "safe_mode": False,
         }
-        try:
-            response = await self._client.post(
-                f"{self.base_url}/api/v1/image/generate", json=payload
-            )
-            response.raise_for_status()
-        except httpx2.HTTPStatusError as e:
-            raise_for_upstream_status(
-                status=e.response.status_code,
-                body=e.response.text[:300],
-                provider="Venice",
-                endpoint="/image/generate",
-            )
-        except httpx2.HTTPError as e:
-            raise UpstreamError(f"Venice /image/generate failed: {e}") from e
+        response = await request_upstream(
+            self._client,
+            "POST",
+            f"{self.base_url}/api/v1/image/generate",
+            json=payload,
+            provider="Venice",
+            endpoint="/image/generate",
+        )
 
         body = parse_json(response, "Venice /image/generate")
         images = body.get("images") or []
@@ -131,20 +119,15 @@ class VeniceClient:
         # safe_mode mirrors the generate path (operator opted out of Venice's
         # content filter there); the form encodes booleans as strings.
         data = {"model": model, "prompt": prompt, "safe_mode": "false"}
-        try:
-            response = await self._client.post(
-                f"{self.base_url}/api/v1/image/edit", data=data, files=files
-            )
-            response.raise_for_status()
-        except httpx2.HTTPStatusError as e:
-            raise_for_upstream_status(
-                status=e.response.status_code,
-                body=e.response.text[:300],
-                provider="Venice",
-                endpoint="/image/edit",
-            )
-        except httpx2.HTTPError as e:
-            raise UpstreamError(f"Venice /image/edit failed: {e}") from e
+        response = await request_upstream(
+            self._client,
+            "POST",
+            f"{self.base_url}/api/v1/image/edit",
+            data=data,
+            files=files,
+            provider="Venice",
+            endpoint="/image/edit",
+        )
 
         content = response.content
         if not content:

@@ -30,7 +30,7 @@ from typing import Any
 import httpx2
 
 from ...errors import UpstreamError
-from ...util.http import parse_json, raise_for_upstream_status, upstream_client
+from ...util.http import parse_json, raise_for_upstream_status, request_upstream, upstream_client
 from ...util.json_body import JsonBody
 
 log = logging.getLogger(__name__)
@@ -100,18 +100,13 @@ class OpenAIClient:
         Unvalidated upstream JSON: entries are Any, not a dict shape we
         have actually checked. Callers validate before indexing.
         """
-        try:
-            response = await self._client.get(f"{self.base_url}/v1/models")
-            response.raise_for_status()
-        except httpx2.HTTPStatusError as e:
-            raise_for_upstream_status(
-                status=e.response.status_code,
-                body=e.response.text[:300],
-                provider="Upstream",
-                endpoint="/v1/models",
-            )
-        except httpx2.HTTPError as e:
-            raise UpstreamError(f"Upstream /v1/models failed: {e}") from e
+        response = await request_upstream(
+            self._client,
+            "GET",
+            f"{self.base_url}/v1/models",
+            provider="Upstream",
+            endpoint="/v1/models",
+        )
         body = parse_json(response, "Upstream /v1/models")
         return list(body.get("data", []))
 
