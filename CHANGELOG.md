@@ -10,6 +10,8 @@ arrived.
 
 ## Unreleased
 
+## v0.8.0
+
 ### Added
 
 - ComfyUI `.meta.json` files are checked against the documented schema at
