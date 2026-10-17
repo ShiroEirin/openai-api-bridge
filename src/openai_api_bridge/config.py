@@ -644,26 +644,11 @@ def get_settings() -> BridgeSettings:
     return BridgeSettings()
 
 
-_providers_cache: ProvidersFile | None = None
-
-
-def get_providers() -> ProvidersFile:
-    """Return the loaded ProvidersFile. Caller must have called `init_providers` first."""
-    if _providers_cache is None:
-        raise RuntimeError("Providers not loaded — call init_providers() at startup")
-    return _providers_cache
-
-
 def init_providers(path: Path | None = None) -> ProvidersFile:
-    """Load (or reload) the providers TOML and update the module-level cache."""
-    global _providers_cache
-    target = path or get_settings().config_path
-    _providers_cache = load_providers(target)
-    return _providers_cache
+    """Load the providers TOML from ``path``, or from the configured path."""
+    return load_providers(path or get_settings().config_path)
 
 
 def reset_caches_for_tests() -> None:
-    """Test hook to clear cached settings/providers."""
-    global _providers_cache
+    """Test hook to clear cached settings."""
     get_settings.cache_clear()
-    _providers_cache = None

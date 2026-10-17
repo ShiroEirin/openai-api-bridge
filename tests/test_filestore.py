@@ -88,7 +88,7 @@ async def test_extension_inference(filestore: FileStore, files_dir: Path) -> Non
         )
 
 
-async def test_set_pinned_and_delete(filestore: FileStore, files_dir: Path) -> None:
+async def test_set_pinned_and_delete_many(filestore: FileStore, files_dir: Path) -> None:
     fid = await filestore.put(
         b"x",
         content_type="image/png",
@@ -105,7 +105,7 @@ async def test_set_pinned_and_delete(filestore: FileStore, files_dir: Path) -> N
     assert meta is not None and meta.pinned is True
 
     assert abs_path.exists()
-    await filestore.delete(fid)
+    assert await filestore.delete_many([fid]) == 1
     assert await filestore.get_metadata(fid) is None
     assert not abs_path.exists()
 

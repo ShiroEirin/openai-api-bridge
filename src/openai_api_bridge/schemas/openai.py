@@ -1,4 +1,4 @@
-"""OpenAI-shaped request and response models.
+"""OpenAI-shaped request models (responses are built as plain dicts).
 
 We intentionally accept-and-ignore extra fields the OpenAI API supports but the
 bridge has no use for (``user``, ``quality``, ``style``, etc.) so well-behaved
@@ -42,53 +42,3 @@ class ImagesGenerationRequest(_Permissive):
     # rather than rejecting.
     aspect_ratio: str | None = None
     response_format: Literal["url", "b64_json"] = "url"
-
-
-class ImageData(BaseModel):
-    url: str | None = None
-    b64_json: str | None = None
-
-
-class ImagesResponse(BaseModel):
-    created: int
-    data: list[ImageData]
-
-
-# --- /v1/models -------------------------------------------------------------
-
-
-class ModelObject(BaseModel):
-    id: str
-    object: Literal["model"] = "model"
-    created: int
-    owned_by: str
-
-
-class ModelList(BaseModel):
-    object: Literal["list"] = "list"
-    data: list[ModelObject]
-
-
-# --- /v1/videos -------------------------------------------------------------
-
-
-VideoStatus = Literal["queued", "in_progress", "completed", "failed"]
-
-
-class VideoErrorBlock(BaseModel):
-    message: str
-    type: str | None = None
-    code: str | None = None
-
-
-class VideoObject(BaseModel):
-    id: str
-    object: Literal["video"] = "video"
-    model: str
-    status: VideoStatus
-    progress: int | None = None
-    seconds: float | None = None
-    size: str | None = None
-    created_at: int
-    completed_at: int | None = None
-    error: VideoErrorBlock | None = None

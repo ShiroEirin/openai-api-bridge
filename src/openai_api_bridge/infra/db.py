@@ -12,7 +12,7 @@ as a wheel, a Docker image, or a checked-out source tree.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Iterable, Sequence
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
@@ -225,7 +225,3 @@ async def run_migrations(db: Database) -> int:
         )
         current = version
     return current
-
-
-def rows_to_dicts(rows: Iterable[aiosqlite.Row]) -> list[dict[str, Any]]:
-    return [dict(r) for r in rows]

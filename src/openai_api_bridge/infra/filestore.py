@@ -285,14 +285,6 @@ class FileStore:
             (1 if pinned else 0, file_id),
         )
 
-    async def delete(self, file_id: str) -> None:
-        meta = await self.get_metadata(file_id)
-        if meta is None:
-            return
-        await self.db.execute("DELETE FROM generated_files WHERE id = ?", (file_id,))
-        with contextlib.suppress(FileNotFoundError):
-            self._absolute(meta.storage_path).unlink()
-
     async def delete_many(self, file_ids: Sequence[str]) -> int:
         """Delete many files at once. Returns how many rows were removed.
 
