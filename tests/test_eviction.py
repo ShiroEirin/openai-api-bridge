@@ -7,8 +7,9 @@ import time
 import pytest
 
 from openai_api_bridge.infra import eviction
-from openai_api_bridge.infra.eviction import run_eviction_pass
+from openai_api_bridge.infra.eviction import EvictionLoop, run_eviction_pass
 from openai_api_bridge.infra.filestore import FileStore
+from openai_api_bridge.infra.jobstore import JobStore
 
 
 async def _put_with_ages(
@@ -183,3 +184,32 @@ async def test_ttl_threshold_is_inclusive_of_retention_window(
     )
     assert ttl == 0
     assert lru == 0
+
+
+async def test_pass_prunes_finished_job_rows_past_retention(
+    filestore: FileStore, jobstore: JobStore
+) -> None:
+    """Nothing else ever deletes a video_jobs row. Finished ones go on the
+    files' retention window; active ones stay however old they are."""
+    old = int(time.time()) - 10 * 86400
+    for job_id, status in [
+        ("old-done", "completed"),
+        ("old-failed", "failed"),
+        ("old-running", "in_progress"),
+        ("new-done", "completed"),
+    ]:
+        await jobstore.create(
+            job_id=job_id, model="p/m", prompt="x", size=None, aspect_ratio=None, seconds=None
+        )
+        await jobstore.update(job_id, status=status)  # type: ignore[arg-type]
+    await filestore.db.execute("UPDATE video_jobs SET updated_at = ? WHERE id LIKE 'old-%'", (old,))
+
+    loop = EvictionLoop(
+        filestore, jobstore, retention_seconds=86400, max_cache_bytes=10**12, interval_seconds=60
+    )
+    await loop._safe_pass()
+
+    assert await jobstore.get("old-done") is None
+    assert await jobstore.get("old-failed") is None
+    assert await jobstore.get("old-running") is not None
+    assert await jobstore.get("new-done") is not None

@@ -193,3 +193,20 @@ class JobStore:
             count = cur.rowcount
             await cur.close()
         return count
+
+    async def prune_terminal(self, *, older_than: int) -> int:
+        """Delete completed/failed jobs last updated before ``older_than``.
+
+        Run by the eviction loop on the same retention window as stored files,
+        so a job row outlives its output by no more than one sweep — past that
+        the row only points at content the file sweep already removed. Active
+        rows are never touched, however old.
+        """
+        async with self.db.transaction() as conn:
+            cur = await conn.execute(
+                "DELETE FROM video_jobs WHERE status IN ('completed', 'failed') AND updated_at < ?",
+                (older_than,),
+            )
+            count = cur.rowcount
+            await cur.close()
+        return count

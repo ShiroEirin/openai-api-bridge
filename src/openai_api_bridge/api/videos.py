@@ -14,8 +14,10 @@ from ..errors import (
     JobNotFound,
     JobNotReady,
     UpstreamError,
+    VideoQueueFull,
 )
 from ..infra.jobstore import VideoJob
+from ..infra.tasks import SchedulerFull
 from ..resources import resources
 from ._assets import asset_response
 from ._videos_runner import run_video_job
@@ -72,46 +74,60 @@ async def videos_create(
     if seconds is not None and seconds <= 0:
         raise InvalidRequest("seconds must be positive", param="seconds")
 
-    input_ref_bytes: bytes | None = None
-    input_ref_ct: str | None = None
-    if input_reference is not None:
-        input_ref_bytes = await input_reference.read()
-        if not input_ref_bytes:
-            raise InvalidRequest("input_reference upload was empty", param="input_reference")
-        input_ref_ct = input_reference.content_type or "image/png"
+    # Claimed before the upload is read into memory — a queued job holds those
+    # bytes until it starts, which is what this bound exists to limit — and
+    # held across every await below until submit() takes it over, so
+    # concurrent requests cannot all pass the check and overshoot it.
+    capacity = res.scheduler.max_concurrent + res.settings.max_queued_video_jobs
+    try:
+        slot = res.scheduler.reserve(capacity)
+    except SchedulerFull as e:
+        raise VideoQueueFull(
+            f"{e.in_flight} video jobs are already running or queued "
+            f"(limit {capacity}); retry later."
+        ) from None
 
-    job_id = secrets.token_hex(16)
-    job = await res.jobstore.create(
-        job_id=job_id,
-        model=model,
-        prompt=prompt,
-        size=size,
-        aspect_ratio=aspect_ratio,
-        seconds=seconds,
-    )
+    with slot:
+        input_ref_bytes: bytes | None = None
+        input_ref_ct: str | None = None
+        if input_reference is not None:
+            input_ref_bytes = await input_reference.read()
+            if not input_ref_bytes:
+                raise InvalidRequest("input_reference upload was empty", param="input_reference")
+            input_ref_ct = input_reference.content_type or "image/png"
 
-    res.scheduler.submit(
-        run_video_job(
+        job_id = secrets.token_hex(16)
+        job = await res.jobstore.create(
             job_id=job_id,
-            provider_id=provider_id,
-            model_slug=model_slug,
+            model=model,
             prompt=prompt,
             size=size,
             aspect_ratio=aspect_ratio,
             seconds=seconds,
-            input_reference=input_ref_bytes,
-            input_reference_content_type=input_ref_ct,
-            dispatcher=res.dispatcher,
-            jobstore=res.jobstore,
-            filestore=res.filestore,
-            timeout_seconds=res.settings.video_job_timeout_seconds,
-        ),
-        name=f"video-job-{job_id}",
-        # The runner enforces the job's deadline itself, so its row says it
-        # timed out. The scheduler's cap is only the backstop past it, for a
-        # runner that somehow does not stop.
-        timeout_seconds=res.settings.video_job_timeout_seconds + _BACKSTOP_GRACE_SECONDS,
-    )
+        )
+
+        res.scheduler.submit(
+            run_video_job(
+                job_id=job_id,
+                provider_id=provider_id,
+                model_slug=model_slug,
+                prompt=prompt,
+                size=size,
+                aspect_ratio=aspect_ratio,
+                seconds=seconds,
+                input_reference=input_ref_bytes,
+                input_reference_content_type=input_ref_ct,
+                dispatcher=res.dispatcher,
+                jobstore=res.jobstore,
+                filestore=res.filestore,
+                timeout_seconds=res.settings.video_job_timeout_seconds,
+            ),
+            name=f"video-job-{job_id}",
+            # The runner enforces the job's deadline itself, so its row says it
+            # timed out. The scheduler's cap is only the backstop past it, for a
+            # runner that somehow does not stop.
+            timeout_seconds=res.settings.video_job_timeout_seconds + _BACKSTOP_GRACE_SECONDS,
+        )
 
     return _video_to_dict(job)
 

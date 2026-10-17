@@ -10,6 +10,13 @@ arrived.
 
 ## Unreleased
 
+### Changed
+
+- The video queue is bounded by `MAX_QUEUED_VIDEO_JOBS` (default 20). Past it,
+  `POST /v1/videos` returns a retriable 429 instead of queueing without limit.
+- Finished video jobs are deleted after `RETENTION_DAYS`, like stored files.
+  They were previously kept forever.
+
 ### Security
 
 - The bearer token is checked before a request body is read. Image and video

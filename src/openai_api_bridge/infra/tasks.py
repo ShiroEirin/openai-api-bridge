@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable, Coroutine
+from types import TracebackType
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -38,6 +39,35 @@ log = logging.getLogger(__name__)
 DEFAULT_TASK_TIMEOUT_SECONDS = 1800.0
 
 
+class SchedulerFull(Exception):
+    """Raised by :meth:`TaskScheduler.reservation` when no slot is free."""
+
+    def __init__(self, in_flight: int, capacity: int) -> None:
+        super().__init__(f"{in_flight} tasks in flight (capacity {capacity})")
+        self.in_flight = in_flight
+        self.capacity = capacity
+
+
+class Reservation:
+    """A slot claimed by :meth:`TaskScheduler.reserve`, released on exit."""
+
+    def __init__(self, scheduler: TaskScheduler) -> None:
+        self._scheduler: TaskScheduler | None = scheduler
+
+    def __enter__(self) -> Reservation:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        if self._scheduler is not None:
+            self._scheduler._release_reservation()
+            self._scheduler = None
+
+
 class TaskScheduler:
     def __init__(
         self,
@@ -48,6 +78,9 @@ class TaskScheduler:
         if max_concurrent < 1:
             raise ValueError("max_concurrent must be >= 1")
         self._sem = asyncio.Semaphore(max_concurrent)
+        self._max_concurrent = max_concurrent
+        # Slots claimed by reservation() whose task is not yet submitted.
+        self._reserved = 0
         self._tasks: set[asyncio.Task[Any]] = set()
         self._tasks_by_name: dict[str, asyncio.Task[Any]] = {}
         self._default_timeout = default_task_timeout_seconds
@@ -123,7 +156,31 @@ class TaskScheduler:
 
     @property
     def in_flight(self) -> int:
-        return len(self._tasks)
+        """Tasks not yet finished, running or waiting, plus live reservations."""
+        return len(self._tasks) + self._reserved
+
+    @property
+    def max_concurrent(self) -> int:
+        return self._max_concurrent
+
+    def reserve(self, capacity: int) -> Reservation:
+        """Claim one of ``capacity`` slots now, until a task is submitted.
+
+        Raises :class:`SchedulerFull` if ``in_flight`` is already at
+        ``capacity``. The check and the claim are one synchronous step; use
+        the returned :class:`Reservation` as a context manager around the
+        work leading up to :meth:`submit`, whose task takes over the slot.
+        Checking ``in_flight`` and submitting later instead leaves every
+        ``await`` in between as a window in which concurrent callers all pass
+        the same check and overshoot the cap.
+        """
+        if self.in_flight >= capacity:
+            raise SchedulerFull(self.in_flight, capacity)
+        self._reserved += 1
+        return Reservation(self)
+
+    def _release_reservation(self) -> None:
+        self._reserved -= 1
 
     async def shutdown(self, *, timeout: float = 30.0) -> None:
         """Wait for all in-flight tasks to finish, then cancel any stragglers."""

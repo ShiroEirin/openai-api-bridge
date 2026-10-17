@@ -78,6 +78,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     scheduler = TaskScheduler(max_concurrent=settings.max_concurrent_video_jobs)
     eviction = EvictionLoop(
         filestore,
+        jobstore,
         retention_seconds=settings.retention_days * 86400,
         max_cache_bytes=settings.max_cache_bytes,
         interval_seconds=settings.eviction_interval_seconds,

@@ -19,6 +19,7 @@ services:
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
       MAX_CACHE_GB: ${MAX_CACHE_GB:-50}
       MAX_CONCURRENT_VIDEO_JOBS: ${MAX_CONCURRENT_VIDEO_JOBS:-2}
+      MAX_QUEUED_VIDEO_JOBS: ${MAX_QUEUED_VIDEO_JOBS:-20}
       VIDEO_JOB_TIMEOUT_SECONDS: ${VIDEO_JOB_TIMEOUT_SECONDS:-3600}
       # Per-provider budget for GET /v1/models. Listed explicitly because this
       # block is an allowlist, not env_file — a value set in .env alone would

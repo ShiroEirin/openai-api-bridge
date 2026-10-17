@@ -367,6 +367,7 @@ sensibly:
 | `MAX_CACHE_GB` | `50` | Size cap for the file cache (LRU past this) |
 | `EVICTION_INTERVAL_SECONDS` | `600` | How often the eviction loop runs |
 | `MAX_CONCURRENT_VIDEO_JOBS` | `2` | Parallel video generations (see [Video jobs](#video-jobs)) |
+| `MAX_QUEUED_VIDEO_JOBS` | `20` | Video jobs allowed to wait for a slot before new ones get a 429 (see [Video jobs](#video-jobs)) |
 | `VIDEO_JOB_TIMEOUT_SECONDS` | `3600` | Wall-clock cap on one video job once it starts (see [Video jobs](#video-jobs)) |
 | `MODELS_TIMEOUT_SECONDS` | `5` | Per-provider budget for `GET /v1/models` (see [Model catalogue caching](#model-catalogue-caching)); `0` disables |
 | `LOG_LEVEL` | `INFO` | TRACE / DEBUG / INFO / WARNING / ERROR |
@@ -532,8 +533,9 @@ The cache window deliberately outlives the eviction window above: a client
 that kept the bytes is still holding a correct copy after the bridge has
 retired its own. Range requests (video seeking) are unaffected.
 
-Completed/failed rows in the video-jobs table are kept as history; they're
-metadata-sized and have no eviction policy today.
+Completed/failed rows in the video-jobs table are pruned by the same sweep
+once they are older than `RETENTION_DAYS`, by which point their output has
+been retired too. Queued and running jobs are never pruned.
 
 ## Video jobs
 
@@ -541,7 +543,10 @@ metadata-sized and have no eviction policy today.
 content). Operationally:
 
 - At most `MAX_CONCURRENT_VIDEO_JOBS` (default 2) run at once; excess jobs
-  queue in `status: "queued"` order.
+  queue in `status: "queued"` order. At most `MAX_QUEUED_VIDEO_JOBS`
+  (default 20) wait, since each holds its reference image in memory; past
+  that, `POST /v1/videos` returns a 429 `rate_limit_error` that OpenAI SDKs
+  retry with backoff.
 - Each job has a wall-clock cap, `VIDEO_JOB_TIMEOUT_SECONDS` (default one
   hour), counted from when it leaves the queue. It sits above every
   provider's own video timeout, so a provider's error is what a client

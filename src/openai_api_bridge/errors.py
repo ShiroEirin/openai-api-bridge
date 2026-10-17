@@ -89,6 +89,18 @@ class JobNotFound(BridgeError):
     code = "not_found"
 
 
+class VideoQueueFull(BridgeError):
+    """429: the bridge's own video queue is at ``MAX_QUEUED_VIDEO_JOBS``.
+
+    ``rate_limit_error`` because that is what OpenAI SDKs retry with backoff,
+    which is the right response: the queue drains as jobs finish.
+    """
+
+    status_code = 429
+    error_type = "rate_limit_error"
+    code = "video_queue_full"
+
+
 class JobNotReady(BridgeError):
     status_code = 409
     error_type = "invalid_request_error"

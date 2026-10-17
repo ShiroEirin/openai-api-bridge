@@ -6,6 +6,9 @@ Runs a periodic asyncio task that combines two policies:
 2. **LRU-by-size** — if the total still exceeds ``max_cache_bytes``, delete
    least-recently-accessed files until back under cap.
 
+Each pass also prunes finished ``video_jobs`` rows past the same retention
+window, which nothing else ever deletes.
+
 Both sweeps skip rows with ``pinned`` set — but **nothing sets it**. See
 :meth:`~openai_api_bridge.infra.filestore.FileStore.set_pinned`: the flag is
 schema and filter with no writer, so in practice every stored file is
@@ -25,6 +28,7 @@ import logging
 import time
 
 from .filestore import FileStore
+from .jobstore import JobStore
 
 log = logging.getLogger(__name__)
 
@@ -90,12 +94,14 @@ class EvictionLoop:
     def __init__(
         self,
         filestore: FileStore,
+        jobstore: JobStore,
         *,
         retention_seconds: int,
         max_cache_bytes: int,
         interval_seconds: float,
     ) -> None:
         self.filestore = filestore
+        self.jobstore = jobstore
         self.retention_seconds = retention_seconds
         self.max_cache_bytes = max_cache_bytes
         self.interval_seconds = interval_seconds
@@ -141,8 +147,11 @@ class EvictionLoop:
                 retention_seconds=self.retention_seconds,
                 max_cache_bytes=self.max_cache_bytes,
             )
-            if ttl or lru:
-                log.info("Eviction pass: TTL=%d LRU=%d", ttl, lru)
+            jobs = await self.jobstore.prune_terminal(
+                older_than=int(time.time()) - self.retention_seconds
+            )
+            if ttl or lru or jobs:
+                log.info("Eviction pass: TTL=%d LRU=%d jobs=%d", ttl, lru, jobs)
             else:
                 log.debug("Eviction pass: nothing to do")
         except Exception:

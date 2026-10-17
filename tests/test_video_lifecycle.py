@@ -614,3 +614,70 @@ async def test_an_unrelated_update_leaves_the_aspect_ratio_alone(
     job = await jobstore.get("ar3")
     assert job is not None
     assert job.aspect_ratio == "4:3"
+
+
+@pytest.fixture
+def _one_slot_no_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Requested before client_with_video, so the app is built with these.
+    monkeypatch.setenv("MAX_CONCURRENT_VIDEO_JOBS", "1")
+    monkeypatch.setenv("MAX_QUEUED_VIDEO_JOBS", "0")
+
+
+@respx.mock
+def test_a_full_video_queue_is_a_retriable_429(
+    _one_slot_no_queue: None, client_with_video: TestClient
+) -> None:
+    """Every waiting job holds its upload in memory, so the queue is bounded.
+    Past it the caller gets a rate_limit_error, which SDKs retry, and a slot
+    freed by a cancel is usable again."""
+    import time
+
+    headers = {"Authorization": "Bearer test-bridge-api-key"}
+    respx.post("http://127.0.0.1:8188/prompt").mock(
+        return_value=httpx.Response(200, json={"prompt_id": "stuck-prompt"})
+    )
+    respx.get("http://127.0.0.1:8188/history/stuck-prompt").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    respx.get("http://127.0.0.1:8188/queue").mock(
+        return_value=httpx.Response(
+            200, json={"queue_running": [[0, "stuck-prompt", {}, {}]], "queue_pending": []}
+        )
+    )
+    form = {"model": "comfyui/tiny-t2v", "prompt": "x"}
+
+    first = client_with_video.post("/v1/videos", headers=headers, data=form)
+    assert first.status_code == 200
+
+    refused = client_with_video.post("/v1/videos", headers=headers, data=form)
+    assert refused.status_code == 429
+    assert refused.json()["error"]["type"] == "rate_limit_error"
+    assert refused.json()["error"]["code"] == "video_queue_full"
+
+    client_with_video.delete(f"/v1/videos/{first.json()['id']}", headers=headers)
+    for _ in range(40):
+        again = client_with_video.post("/v1/videos", headers=headers, data=form)
+        if again.status_code == 200:
+            client_with_video.delete(f"/v1/videos/{again.json()['id']}", headers=headers)
+            break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("the cancelled job's slot never came back")
+
+
+def test_a_reservation_counts_against_capacity_until_released() -> None:
+    """The route claims its slot before awaiting the upload and the job
+    insert. Were it only checked, concurrent requests would all pass the same
+    check during those awaits and overshoot the cap."""
+    from openai_api_bridge.infra.tasks import SchedulerFull
+
+    scheduler = TaskScheduler(max_concurrent=1)
+    slot = scheduler.reserve(1)
+    assert scheduler.in_flight == 1
+    with pytest.raises(SchedulerFull):
+        scheduler.reserve(1)
+    with slot:
+        pass
+    assert scheduler.in_flight == 0
+    with scheduler.reserve(1):
+        assert scheduler.in_flight == 1
