@@ -173,10 +173,10 @@ def create_app() -> FastAPI:
     # uvicorn's "main:app" import, the tests) already has the environment set
     # by this point.
     settings = get_settings()
-    # FastAPI mounts /docs, /redoc and /openapi.json outside the dependency
-    # graph, so they answer without the bearer token every real route
-    # requires. Passing None removes the routes entirely rather than hiding
-    # them. See BridgeSettings.enable_docs.
+    # When enabled, /docs, /redoc and /openapi.json are exempted from the
+    # auth middleware below, so they answer without the bearer token every
+    # real route requires. Passing None removes the routes entirely rather
+    # than hiding them. See BridgeSettings.enable_docs.
     docs_enabled = settings.enable_docs
     app = FastAPI(
         title="OpenAI API Bridge",

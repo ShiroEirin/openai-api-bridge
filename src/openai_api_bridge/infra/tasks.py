@@ -40,7 +40,7 @@ DEFAULT_TASK_TIMEOUT_SECONDS = 1800.0
 
 
 class SchedulerFull(Exception):
-    """Raised by :meth:`TaskScheduler.reservation` when no slot is free."""
+    """Raised by :meth:`TaskScheduler.reserve` when no slot is free."""
 
     def __init__(self, in_flight: int, capacity: int) -> None:
         super().__init__(f"{in_flight} tasks in flight (capacity {capacity})")
