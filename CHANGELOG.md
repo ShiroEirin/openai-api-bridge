@@ -21,6 +21,8 @@ arrived.
 
 ### Security
 
+- A fal model id containing URL syntax (`?`, `#`, `%`, `..`) is refused rather
+  than placed in the path of a request carrying the bridge's fal key.
 - The bearer token is checked before a request body is read. Image and video
   requests without a valid key were parsed, uploads included, before being refused.
 

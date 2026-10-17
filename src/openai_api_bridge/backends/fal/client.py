@@ -22,12 +22,19 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
 import httpx2
 
-from ...errors import RateLimited, UnsupportedOperation, UpstreamAuthError, UpstreamError
+from ...errors import (
+    InvalidRequest,
+    RateLimited,
+    UnsupportedOperation,
+    UpstreamAuthError,
+    UpstreamError,
+)
 from ...util.http import (
     fetch_asset_with_retry,
     parse_json,
@@ -90,6 +97,25 @@ class QueuedRequest:
     cancel_url: str
 
 
+# A fal model id as fal writes them: slash-separated segments of letters,
+# digits, ".", "_" and "-" (``fal-ai/bytedance/seedream/v4/text-to-image``).
+_MODEL_SEGMENT = re.compile(r"[A-Za-z0-9_.-]+")
+
+
+def _model_path(model_id: str) -> str:
+    """``model_id`` as a URL path, refused unless it is shaped like a fal id.
+
+    With ``discover_models`` on, the slug from the request is passed through
+    unvalidated, and it becomes the path of an authenticated request to fal.
+    A ``?``, ``#``, ``%`` or a ``..`` segment would steer that request — with
+    the bridge's fal key on it — somewhere other than a model endpoint.
+    """
+    segments = model_id.split("/")
+    if not all(_MODEL_SEGMENT.fullmatch(seg) and seg not in (".", "..") for seg in segments):
+        raise InvalidRequest(f"Not a valid fal model id: {model_id!r}", param="model")
+    return model_id
+
+
 class FalClient:
     def __init__(
         self,
@@ -140,7 +166,7 @@ class FalClient:
         assembled by the adapter (prompt, size, safety knobs, …). The caller
         fetches bytes for each returned URL via :meth:`fetch_asset`.
         """
-        url = f"{self.base_url}/{model_id}"
+        url = f"{self.base_url}/{_model_path(model_id)}"
         try:
             resp = await self._client.post(url, json=body, headers=self._inference_headers)
             resp.raise_for_status()
@@ -166,7 +192,7 @@ class FalClient:
         status/response URLs, so we use those verbatim rather than rebuilding
         them and guessing at fal's path layout.
         """
-        url = f"{self.queue_base_url}/{model_id}"
+        url = f"{self.queue_base_url}/{_model_path(model_id)}"
         try:
             resp = await self._client.post(url, json=body, headers=self._inference_headers)
             resp.raise_for_status()

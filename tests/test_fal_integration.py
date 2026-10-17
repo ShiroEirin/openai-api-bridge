@@ -2693,3 +2693,41 @@ def test_leading_connector_is_still_capitalised(discovering_client: TestClient) 
     names = {m["id"]: m["display_name"] for m in r.json()["data"]}
     assert names["fal/fal-ai/thing/to-video"] == "Thing (To-Video)"
     assert names["fal/fal-ai/thing/from-image"] == "Thing (From-Image)"
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        "fal-ai/flux/dev",
+        "fal-ai/bytedance/seedream/v4/text-to-image",
+        "fal-ai/veo3.1/image-to-video",
+        "some_org/model-v1.5",
+    ],
+)
+def test_real_fal_ids_are_valid_paths(model_id: str) -> None:
+    from openai_api_bridge.backends.fal.client import _model_path
+
+    assert _model_path(model_id) == model_id
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        "fal-ai/flux?x=1",
+        "fal-ai/flux#frag",
+        "fal-ai/../../v1/other",
+        "fal-ai/./flux",
+        "fal-ai/%2e%2e/x",
+        "fal-ai//flux",
+        "fal-ai/flux dev",
+        "fal-ai/flux\r\nX: y",
+    ],
+)
+def test_a_slug_that_would_steer_the_request_is_refused(model_id: str) -> None:
+    """With discovery on, the request's slug becomes the path of a request
+    carrying the bridge's fal key; it must not be able to leave the model."""
+    from openai_api_bridge.backends.fal.client import _model_path
+    from openai_api_bridge.errors import InvalidRequest
+
+    with pytest.raises(InvalidRequest):
+        _model_path(model_id)
