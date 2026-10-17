@@ -152,3 +152,15 @@ def test_from_fields_does_not_parse_its_own_encoding(monkeypatch: pytest.MonkeyP
     body = JsonBody.from_fields({"model": "m", "messages": [{"content": "x" * 1000}]})
     assert json.loads(body.raw)["model"] == "m"
     assert json.loads(body.replace_top_level({"model": "n"}).raw)["model"] == "n"
+
+
+def test_padding_between_members_is_skipped_quickly() -> None:
+    import time
+
+    pad = " \n\t\r" * 1_000_000
+    raw = ("{" + pad + '"model"' + pad + ":" + pad + '"p/m"' + pad + "}" + pad).encode()
+    started = time.perf_counter()
+    body = parse_object(raw)
+    assert time.perf_counter() - started < 0.5
+    assert body.fields == {"model": "p/m"}
+    assert json.loads(body.replace_top_level({"model": "m"}).raw) == {"model": "m"}

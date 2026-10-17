@@ -17,20 +17,23 @@ those offsets and leaves the rest of the bytes alone.
 from __future__ import annotations
 
 import json
+import re
 from bisect import bisect_left
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 _DECODER = json.JSONDecoder()
-_WS = " \t\n\r"
+# JSON's four whitespace characters, matched in C as the stdlib decoder does.
+# A Python loop over characters let a body padded with megabytes of whitespace
+# between members hold the event loop for hundreds of milliseconds.
+_WS = re.compile(r"[ \t\n\r]*")
 
 
 def _skip_ws(text: str, i: int) -> int:
-    n = len(text)
-    while i < n and text[i] in _WS:
-        i += 1
-    return i
+    match = _WS.match(text, i)
+    assert match is not None  # a pattern that can match empty always matches
+    return match.end()
 
 
 @dataclass(frozen=True, slots=True)
