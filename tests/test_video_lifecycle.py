@@ -681,3 +681,19 @@ def test_a_reservation_counts_against_capacity_until_released() -> None:
     assert scheduler.in_flight == 0
     with scheduler.reserve(1):
         assert scheduler.in_flight == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"), [("seconds", "121"), ("seconds", "0"), ("size", "100000x720")]
+)
+def test_video_requests_past_the_bounds_are_400(
+    client_with_video: TestClient, field: str, value: str
+) -> None:
+    headers = {"Authorization": "Bearer test-bridge-api-key"}
+    r = client_with_video.post(
+        "/v1/videos",
+        headers=headers,
+        data={"model": "comfyui/tiny-t2v", "prompt": "x", field: value},
+    )
+    assert r.status_code == 400
+    assert r.json()["error"]["param"] == field

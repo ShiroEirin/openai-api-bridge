@@ -56,3 +56,21 @@ def test_non_positive_dimensions_never_reach_a_provider(raw: str) -> None:
     upstream as a request parameter. Invalidating the whole pair also stops
     "1024x0" half-applying a width the caller didn't mean."""
     assert parse_size(raw) == (0, 0)
+
+
+def test_size_bounds_reject_an_oversized_side() -> None:
+    from openai_api_bridge.errors import InvalidRequest
+    from openai_api_bridge.util.sizes import MAX_SIZE_SIDE, check_size_bounds
+
+    check_size_bounds(f"{MAX_SIZE_SIDE}x{MAX_SIZE_SIDE}")
+    for size in (f"{MAX_SIZE_SIDE + 1}x512", f"512x{MAX_SIZE_SIDE + 1}"):
+        with pytest.raises(InvalidRequest) as exc:
+            check_size_bounds(size)
+        assert exc.value.param == "size"
+
+
+@pytest.mark.parametrize("size", [None, "", "auto", "garbage", "-1x100", "1024X1024"])
+def test_size_bounds_leave_unparsed_sizes_to_the_default(size: str | None) -> None:
+    from openai_api_bridge.util.sizes import check_size_bounds
+
+    check_size_bounds(size)  # no raise: these already mean "use the default"

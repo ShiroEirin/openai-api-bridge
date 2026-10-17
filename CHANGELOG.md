@@ -16,6 +16,8 @@ arrived.
   `POST /v1/videos` returns a retriable 429 instead of queueing without limit.
 - Finished video jobs are deleted after `RETENTION_DAYS`, like stored files.
   They were previously kept forever.
+- A `size` over 8192px on either side, or a video `seconds` over 120, is now
+  rejected with a 400 instead of being passed to the provider.
 
 ### Security
 

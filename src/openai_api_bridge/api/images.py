@@ -14,6 +14,7 @@ from ..errors import InvalidRequest
 from ..infra.filestore import FileStore
 from ..resources import resources
 from ..schemas.openai import MAX_IMAGES_PER_REQUEST, ImagesGenerationRequest
+from ..util.sizes import check_size_bounds
 
 router = APIRouter()
 
@@ -62,6 +63,7 @@ async def _render_assets(
 
 @router.post("/v1/images/generations")
 async def images_generations(req: ImagesGenerationRequest, request: Request) -> dict[str, Any]:
+    check_size_bounds(req.size)
     provider_id, model_slug = parse_model_id(req.model)
     res = resources(request)
     backend = res.dispatcher.for_provider(provider_id)
@@ -111,6 +113,7 @@ async def images_edits(
         raise InvalidRequest(
             f"n must be between 1 and {MAX_IMAGES_PER_REQUEST} (got {n})", param="n"
         )
+    check_size_bounds(size)
     if response_format not in ("url", "b64_json"):
         raise InvalidRequest(
             f"response_format must be 'url' or 'b64_json' (got {response_format!r})",

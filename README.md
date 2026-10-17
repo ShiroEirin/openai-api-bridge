@@ -227,6 +227,8 @@ What the bridge does enforce:
   placeholder key.
 - Request bodies are capped (`BRIDGE_MAX_REQUEST_MB`) before being buffered,
   and downloaded assets are capped (`max_asset_mb`) as they stream.
+- A requested `size` is capped at 8192px per side and a video's `seconds` at
+  120, so a typo cannot ask a render box for an allocation it cannot make.
 - Stored assets are served `nosniff` + `Content-Disposition: attachment`, with
   media types narrowed to a known-good set.
 - Provider secrets live in environment variables referenced *by name* from

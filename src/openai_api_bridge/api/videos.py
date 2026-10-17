@@ -19,6 +19,7 @@ from ..errors import (
 from ..infra.jobstore import VideoJob
 from ..infra.tasks import SchedulerFull
 from ..resources import resources
+from ..util.sizes import check_size_bounds
 from ._assets import asset_response
 from ._videos_runner import run_video_job
 
@@ -29,6 +30,11 @@ router = APIRouter()
 # How far past a video job's own deadline the scheduler's hard cap sits: room
 # for the runner to record the timeout before anything cancels it.
 _BACKSTOP_GRACE_SECONDS = 60.0
+
+# Ceiling on a requested clip length. ComfyUI turns seconds into a frame
+# count, so an absurd value is an absurd allocation on the render box; the
+# hosted video models top out well under this.
+MAX_VIDEO_SECONDS = 120.0
 
 
 def _video_to_dict(job: VideoJob) -> dict[str, Any]:
@@ -71,8 +77,11 @@ async def videos_create(
     # accepting the job and immediately failing inside the runner.
     res.dispatcher.for_provider(provider_id)
 
-    if seconds is not None and seconds <= 0:
-        raise InvalidRequest("seconds must be positive", param="seconds")
+    if seconds is not None and not 0 < seconds <= MAX_VIDEO_SECONDS:
+        raise InvalidRequest(
+            f"seconds must be greater than 0 and at most {MAX_VIDEO_SECONDS:g}", param="seconds"
+        )
+    check_size_bounds(size)
 
     # Claimed before the upload is read into memory — a queued job holds those
     # bytes until it starts, which is what this bound exists to limit — and

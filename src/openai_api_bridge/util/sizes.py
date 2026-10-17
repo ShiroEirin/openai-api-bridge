@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+from ..errors import InvalidRequest
+
+# Ceiling on either side of a requested ``size``. parse_size only refuses
+# non-positive values, so "100000x100000" reached every backend as a real
+# request: a ComfyUI box asked to allocate a latent that size stalls or OOMs
+# for every other caller, and a paid upstream either rejects it after a
+# round trip or bills for it. 8192 clears every model the bridge serves.
+MAX_SIZE_SIDE = 8192
+
 
 def parse_size(size: str | None) -> tuple[int, int]:
     """Parse OpenAI's ``"WIDTHxHEIGHT"`` size string. Returns (0, 0) for falsy/invalid input.
@@ -36,3 +45,16 @@ def parse_size(size: str | None) -> tuple[int, int]:
     if width <= 0 or height <= 0:
         return 0, 0
     return width, height
+
+
+def check_size_bounds(size: str | None) -> None:
+    """Reject a ``size`` whose parsed sides exceed :data:`MAX_SIZE_SIDE`.
+
+    Only what :func:`parse_size` would actually honour is checked, so a
+    malformed size still means "use the default" rather than becoming an error.
+    """
+    width, height = parse_size(size)
+    if width > MAX_SIZE_SIDE or height > MAX_SIZE_SIDE:
+        raise InvalidRequest(
+            f"size {size!r} exceeds the {MAX_SIZE_SIDE}px limit per side", param="size"
+        )

@@ -206,3 +206,28 @@ def test_files_content_nonexistent(
 ) -> None:
     r = client.get("/v1/files/abcdef/content", headers=auth_headers)
     assert r.status_code == 404
+
+
+def test_images_generations_rejects_an_oversized_size(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.post(
+        "/v1/images/generations",
+        headers=auth_headers,
+        json={"model": "ghost/x", "prompt": "x", "size": "100000x100000"},
+    )
+    assert r.status_code == 400
+    assert r.json()["error"]["param"] == "size"
+
+
+def test_images_edits_rejects_an_oversized_size(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.post(
+        "/v1/images/edits",
+        headers=auth_headers,
+        data={"model": "ghost/x", "prompt": "x", "size": "512x100000"},
+        files={"image": ("a.png", b"x")},
+    )
+    assert r.status_code == 400
+    assert r.json()["error"]["param"] == "size"
