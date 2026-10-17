@@ -26,6 +26,9 @@ arrived.
 
 ### Fixed
 
+- A ComfyUI workflow whose `.meta.json` names nodes as numbers (`6` rather than
+  `"6"`) now works. The prompt node failed outright, and image, size and length
+  nodes were silently skipped.
 - `[defaults] cache_workflows` now applies to ComfyUI providers that don't set
   their own. It was read and ignored, so setting it false did nothing.
 - A video job that runs too long now fails as timed out rather than as

@@ -323,3 +323,49 @@ def test_seconds_to_frames_without_fps_meta() -> None:
     assert seconds_to_frames(5.0, {}) is None
     assert seconds_to_frames(None, {"fps": 30}) is None
     assert seconds_to_frames(0, {"fps": 30}) is None
+
+
+def test_integer_node_ids_in_meta_reach_their_nodes(tmp_path: Path) -> None:
+    """Graph node ids are string keys; a meta naming them as integers used to
+    fail on the prompt node and silently skip images, size and length."""
+    _write_pair(
+        tmp_path,
+        "ints",
+        graph={
+            "6": {"class_type": "CLIPTextEncode", "inputs": {"text": ""}},
+            "7": {"class_type": "LoadImage", "inputs": {"image": ""}},
+            "8": {"class_type": "EmptyLatentImage", "inputs": {"width": 0, "height": 0}},
+            "9": {"class_type": "PrimitiveInt", "inputs": {"value": 0}},
+            "10": {"class_type": "KSampler", "inputs": {"seed": 1}},
+            "11": {"class_type": "KSampler", "inputs": {"seed": 1}},
+        },
+        meta={
+            "positive_prompt_node": 6,
+            "image_inputs": [{"node": 7, "field": "image"}],
+            "dimensions_node": 8,
+            "length_node": 9,
+            "seed_nodes": [10],
+        },
+    )
+    rec = scan_workflows(tmp_path)["ints"]
+    out = _prepare(
+        rec,
+        prompt_text="HELLO",
+        image_filenames=["ref.png"],
+        width=640,
+        height=480,
+        length=33,
+        rng=random.Random(0),
+    )
+    assert out["6"]["inputs"]["text"] == "HELLO"
+    assert out["7"]["inputs"]["image"] == "ref.png"
+    assert out["8"]["inputs"] == {"width": 640, "height": 480}
+    assert out["9"]["inputs"]["value"] == 33
+    assert out["10"]["inputs"]["seed"] != 1
+    assert out["11"]["inputs"]["seed"] == 1  # not listed in seed_nodes
+
+
+def test_scan_skips_a_meta_that_is_not_an_object(tmp_path: Path) -> None:
+    (tmp_path / "x.json").write_text("{}")
+    (tmp_path / "x.meta.json").write_text("[]")
+    assert scan_workflows(tmp_path) == {}

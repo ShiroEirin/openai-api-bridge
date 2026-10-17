@@ -75,9 +75,13 @@ def scan_workflows(workflows_dir: Path) -> dict[str, WorkflowRecord]:
         except (json.JSONDecodeError, OSError) as e:
             log.warning("Skipping %s: meta read failed: %s", json_path.name, e)
             continue
+        if not isinstance(meta, dict):
+            log.warning("Skipping %s: meta is not a JSON object", json_path.name)
+            continue
         if "positive_prompt_node" not in meta:
             log.warning("Skipping %s: meta missing 'positive_prompt_node'", json_path.name)
             continue
+        meta = _normalize_node_ids(meta)
 
         # The graph is read here only when something needs it: autodetecting the
         # output type, or reading the aspect-ratio node's saved default. Most
@@ -127,6 +131,40 @@ def scan_workflows(workflows_dir: Path) -> dict[str, WorkflowRecord]:
             output_type,
             f", {len(aspect_ratios)} aspect ratios" if aspect_ratios else "",
         )
+    return out
+
+
+# Meta fields that name a graph node. A graph's node ids are always JSON object
+# keys, so strings; a meta file can just as easily say 6 as "6".
+_NODE_ID_FIELDS = ("positive_prompt_node", "dimensions_node", "length_node", "aspect_ratio_node")
+
+
+def _node_id(value: Any) -> Any:
+    # bool is an int subclass, and `true` is no node id; leave it to fail.
+    return str(value) if isinstance(value, int) and not isinstance(value, bool) else value
+
+
+def _normalize_node_ids(meta: dict[str, Any]) -> dict[str, Any]:
+    """Coerce integer node ids in ``meta`` to the strings the graph keys by.
+
+    Use sites test membership with ``node_id in workflow``, so an integer id
+    never matched: ``positive_prompt_node: 6`` failed every request as "not
+    present in graph", and an integer ``image_inputs`` node, ``dimensions_node``
+    or ``length_node`` was skipped without a word — reference images, size and
+    length silently not applied. Done once at scan time so every reader sees
+    the same form.
+    """
+    out = dict(meta)
+    for key in _NODE_ID_FIELDS:
+        if key in out:
+            out[key] = _node_id(out[key])
+    if isinstance(out.get("image_inputs"), list):
+        out["image_inputs"] = [
+            {**spec, "node": _node_id(spec.get("node"))} if isinstance(spec, dict) else spec
+            for spec in out["image_inputs"]
+        ]
+    if isinstance(out.get("seed_nodes"), list):
+        out["seed_nodes"] = [_node_id(n) for n in out["seed_nodes"]]
     return out
 
 
