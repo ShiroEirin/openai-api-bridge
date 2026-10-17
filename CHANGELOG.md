@@ -10,6 +10,12 @@ arrived.
 
 ## Unreleased
 
+### Added
+
+- ComfyUI `.meta.json` files are checked against the documented schema at
+  startup, and each problem is logged as a warning. Nothing is rejected yet; a
+  later release will refuse workflows whose meta fails the check.
+
 ### Changed
 
 - The video queue is bounded by `MAX_QUEUED_VIDEO_JOBS` (default 20). Past it,

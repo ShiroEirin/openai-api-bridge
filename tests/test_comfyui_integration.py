@@ -131,7 +131,7 @@ def test_models_capabilities_follow_declared_image_inputs(
             {
                 "positive_prompt_node": "1",
                 "display_name": "Tiny I2I",
-                "image_inputs": [{"node": "2"}],
+                "image_inputs": [{"node": "2", "field": "image"}],
             }
         )
     )

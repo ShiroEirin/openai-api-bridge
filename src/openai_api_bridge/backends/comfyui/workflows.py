@@ -22,6 +22,7 @@ from ...errors import UnsupportedOperation, WorkflowInvalid
 from ...kinds import AssetKind
 from ...util.aspect import AspectRatio, parse_aspect_ratio, parse_aspect_ratios, snap_aspect_ratio
 from ...util.ids import slugify
+from .meta import check_meta
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +83,7 @@ def scan_workflows(workflows_dir: Path) -> dict[str, WorkflowRecord]:
         if "positive_prompt_node" not in meta:
             log.warning("Skipping %s: meta missing 'positive_prompt_node'", json_path.name)
             continue
+        check_meta(meta, meta_path.name)
         meta = _normalize_node_ids(meta)
 
         # The graph is read here only when something needs it: autodetecting the

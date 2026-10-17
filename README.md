@@ -578,7 +578,13 @@ where the bridge should inject things:
 }
 ```
 
-Only `positive_prompt_node` is required:
+Only `positive_prompt_node` is required. Node ids may be strings or integers.
+
+At startup the bridge checks each meta file against this table and logs a
+warning for every problem it finds: an unknown key (usually a typo), a missing
+required field, or a value of the wrong type, such as `"multiple": "false"` as a
+string. The workflow still loads as before. A future release will refuse to
+load a workflow whose meta fails these checks, so fix any warnings you see.
 
 | Field | Default | Purpose |
 |---|---|---|
@@ -586,6 +592,7 @@ Only `positive_prompt_node` is required:
 | `positive_prompt_field` | `"text"` | Field name on that node |
 | `display_name` | the workflow filename | Human-readable name surfaced in `/v1/models` |
 | `image_inputs` | `[]` | Where attached input images land — each entry is `{node, field}` plus optional `format` (`"filename"`, the default, or `"list"`) and `multiple: true` to route all remaining images into one input |
+| `image_required` | `false` | Reject a request that brings no input image (`400 image_required`) rather than rendering without one |
 | `dimensions_node` / `width_field` / `height_field` | — / `"width"` / `"height"` | Node that receives the request's `size`. Mutually exclusive with `aspect_ratio_node` — declaring both logs a warning and the ratio wins |
 | `aspect_ratio_node` / `aspect_ratio_field` | — / `"aspect_ratio"` | Node that receives the request's `aspect_ratio` (a `ResolutionSelector`, `FluxResolutionNode`, …). Requires `aspect_ratios`; half a declaration warns and disables the selector, as does naming a node or field the graph doesn't have — otherwise the write would land on an input the node ignores and every render would quietly use the graph's own ratio |
 | `aspect_ratios` | — | The values that node accepts, **written exactly as the node spells them** — `["1:1 (Square)", "16:9 (Widescreen)"]`. The bridge derives the canonical ratio from each one's leading `W:H` token and advertises `{value, label}`, so a third-party node's own options (`"5:7 (Balanced Portrait)"`) work with no bridge change. Declared order is the order a client renders, and breaks ties when snapping. There's no deriving this from the graph — the graph holds the current *value*, never the node's menu |
