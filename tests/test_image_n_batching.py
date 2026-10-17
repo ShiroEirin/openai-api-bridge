@@ -27,6 +27,7 @@ from openai_api_bridge.config import (
     OpenRouterProviderConfig,
     VeniceProviderConfig,
 )
+from openai_api_bridge.infra.filestore import FileStore
 from openai_api_bridge.util.concurrency import run_all
 
 _PNG = b"\x89PNG\r\n\x1a\n"
@@ -214,3 +215,31 @@ async def test_run_all_preserves_order_and_returns_every_result() -> None:
         return i
 
     assert await run_all([functools.partial(make, i) for i in range(5)]) == [0, 1, 2, 3, 4]
+
+
+async def test_rendered_urls_follow_the_assets_order(filestore: FileStore) -> None:
+    """Storage runs concurrently; the response must still list each URL
+    against the asset it stored, in the backend's order."""
+    from types import SimpleNamespace
+
+    from openai_api_bridge.api.images import _render_assets
+    from openai_api_bridge.backends.base import GeneratedAsset
+
+    assets = [
+        GeneratedAsset(data=bytes([i]) * 10, content_type="image/png", kind="image")
+        for i in range(4)
+    ]
+    out = await _render_assets(
+        assets,
+        response_format="url",
+        filestore=filestore,
+        settings=SimpleNamespace(public_base_url=None),  # type: ignore[arg-type]
+        provider_id="p",
+        model_slug="m",
+        prompt="x",
+    )
+    for i, item in enumerate(out):
+        file_id = item["url"].split("/")[3]
+        opened = await filestore.open_for_read(file_id)
+        assert opened is not None
+        assert opened.path.read_bytes() == bytes([i]) * 10

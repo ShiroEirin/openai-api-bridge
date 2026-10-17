@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import time
+from collections.abc import Callable, Coroutine
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
@@ -14,6 +15,7 @@ from ..errors import InvalidRequest
 from ..infra.filestore import FileStore
 from ..resources import resources
 from ..schemas.openai import MAX_IMAGES_PER_REQUEST, ImagesGenerationRequest
+from ..util.concurrency import run_all
 from ..util.sizes import check_size_bounds
 
 router = APIRouter()
@@ -41,15 +43,20 @@ async def _render_assets(
     model_slug: str,
     prompt: str,
 ) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for asset in assets:
+
+    def _extra(asset: GeneratedAsset) -> dict[str, Any]:
         # Non-standard, omitted when the backend didn't say. The ratio actually
         # rendered, which snapping means need not be the one requested.
-        extra = {"aspect_ratio": asset.aspect_ratio} if asset.aspect_ratio else {}
-        if response_format == "b64_json":
-            out.append({"b64_json": base64.b64encode(asset.data).decode("ascii"), **extra})
-            continue
-        file_id = await filestore.put(
+        return {"aspect_ratio": asset.aspect_ratio} if asset.aspect_ratio else {}
+
+    if response_format == "b64_json":
+        return [
+            {"b64_json": base64.b64encode(asset.data).decode("ascii"), **_extra(asset)}
+            for asset in assets
+        ]
+
+    def _store(asset: GeneratedAsset) -> Callable[[], Coroutine[Any, Any, str]]:
+        return lambda: filestore.put(
             asset.data,
             content_type=asset.content_type,
             kind=asset.kind,
@@ -57,8 +64,14 @@ async def _render_assets(
             source_model=model_slug,
             prompt_excerpt=prompt,
         )
-        out.append({"url": _build_url(settings, file_id), **extra})
-    return out
+
+    # Concurrently: each put writes off the event loop, so n images' disk
+    # writes overlap instead of the response waiting on their sum.
+    file_ids = await run_all([_store(asset) for asset in assets])
+    return [
+        {"url": _build_url(settings, file_id), **_extra(asset)}
+        for asset, file_id in zip(assets, file_ids, strict=True)
+    ]
 
 
 @router.post("/v1/images/generations")
