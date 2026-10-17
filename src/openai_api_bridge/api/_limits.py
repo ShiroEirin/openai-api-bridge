@@ -99,7 +99,7 @@ class BodySizeLimitMiddleware:
                 length = -1
             if length > self.max_bytes:
                 log.warning(
-                    "Refusing %s %s: declared Content-Length %d exceeds the %d byte cap",
+                    "Refusing %s %r: declared Content-Length %d exceeds the %d byte cap",
                     scope.get("method", "?"),
                     scope.get("path", "?"),
                     length,
@@ -165,7 +165,7 @@ class BodySizeLimitMiddleware:
 
         async def _log_and_send(size: int) -> None:
             log.warning(
-                "Refusing %s %s: body reached %d bytes, past the %d byte cap",
+                "Refusing %s %r: body reached %d bytes, past the %d byte cap",
                 scope.get("method", "?"),
                 scope.get("path", "?"),
                 size,
