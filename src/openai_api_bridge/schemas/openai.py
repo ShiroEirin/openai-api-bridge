@@ -41,4 +41,10 @@ class ImagesGenerationRequest(_Permissive):
     # backend knows what a given model offers, and it snaps to the nearest
     # rather than rejecting.
     aspect_ratio: str | None = None
-    response_format: Literal["url", "b64_json"] = "url"
+    # 本地补丁（非上游改动）：默认改为内联返回 base64。
+    # 原因：桥的 ApiKeyMiddleware 是最外层 ASGI 中间件，保护**所有**路由，
+    # 包括 /v1/files/{file_id}/content（v0.8.0 移除该路由上的 require_api_key
+    # 依赖只是清理冗余，鉴权仍在中间件层）。而 Snow App 下载图片 URL 时不带
+    # Bearer → 401 → 界面显示「远程图片加载失败」。改成 b64_json 后图片随响应
+    # 内联返回，Snow App 无需二次下载。
+    response_format: Literal["url", "b64_json"] = "b64_json"

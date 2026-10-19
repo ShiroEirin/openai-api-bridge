@@ -117,7 +117,9 @@ async def images_edits(
     n: Annotated[int, Form()] = 1,
     size: Annotated[str | None, Form()] = None,
     aspect_ratio: Annotated[str | None, Form()] = None,
-    response_format: Annotated[str, Form()] = "url",
+    # 本地补丁（非上游改动）：同 schemas/openai.py 的说明 —— Snow App 下载
+    # 图片 URL 不带 Bearer，会被 ApiKeyMiddleware 拦成 401，故默认内联返回。
+    response_format: Annotated[str, Form()] = "b64_json",
 ) -> dict[str, Any]:
     # The same ceiling ImagesGenerationRequest applies on the JSON path, which
     # this endpoint can't reuse: its fields are multipart Form bindings, not a
